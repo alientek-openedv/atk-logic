@@ -1,0 +1,4 @@
+module config
+singleton Config   1.0   Config.qml
+singleton Signal   1.0   Signal.qml
+singleton Setting   1.0   Setting.qml
