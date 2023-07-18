@@ -26,7 +26,7 @@ ATK-Logic软件的用户界面简洁直观，操作简单易学。它为用户�
 特殊说明：我们不对源码提供任何技术支持服务
 ```
 
-- atk_libsigrokdecode
+- atk_libsigrokdecode : https://github.com/alientek-openedv/atk_libsigrokdecode.git
 - libusb-1.0 
 - qBreakpad v1.0
 
