@@ -1,4 +1,4 @@
-<div align=center>![atk-logo](./img/logo.png)
+![atk-logo](./img/logo.png)
 
 
 软件简介(ATK-Logic)
