@@ -1,25 +1,14 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "draw_background.h"
+﻿#include "draw_background.h"
 
 DrawBackground::DrawBackground(QQuickItem *parent) : QQuickPaintedItem{parent}
 {
     connect(this,SIGNAL(widthChanged()),this,SLOT(onSizeChanged()));
     connect(this,SIGNAL(heightChanged()),this,SLOT(onSizeChanged()));
+
+    qreal lineWidth=4,lineHeight=4;
+    m_crossChannelHitLines.append(QLine(0,0,lineWidth,lineHeight));
+    m_crossChannelHitLines.append(QLine(0,qCeil(lineHeight/2),lineWidth,qCeil(lineHeight/2)));
+    m_crossChannelHitLines.append(QLine(0,lineHeight,lineWidth,0));
 }
 
 void DrawBackground::paint(QPainter* painter)
@@ -29,6 +18,7 @@ void DrawBackground::paint(QPainter* painter)
     painter->save();
     drawVernier(*painter);
     drawMouseZoom(*painter);
+    drawCrossChannelMeasure(*painter);
     painter->restore();
 }
 
@@ -56,7 +46,78 @@ void DrawBackground::drawVernier(QPainter &painter)
 void DrawBackground::drawMouseZoom(QPainter &painter)
 {
     if(m_showMouseZoom)
-        painter.fillRect(m_mouseZoomRect.x(),m_mouseZoomRect.y()+m_mouseZoomOffsetY,m_mouseZoomRect.width(),m_mouseZoomRect.height(),QColor::fromRgb(80,80,80,204));
+        painter.fillRect(m_mouseZoomRect.x(),m_mouseZoomRect.y()+m_mouseZoomOffsetY,
+                         m_mouseZoomRect.width(),m_mouseZoomRect.height(),QColor::fromRgb(80,80,80,204));
+}
+
+void DrawBackground::drawCrossChannelMeasure(QPainter &painter)
+{
+    if(m_crossChannelMeasureState){
+        {
+            QPoint startPoint=QPoint(m_crossChannelMeasureStartPosition.point.x(),
+                                     m_crossChannelMeasureStartPosition.point.y()+m_crossChannelMeasureStartPosition.YOffset);
+            QPoint endPoint=QPoint(m_crossChannelMeasureEndPosition.point.x(),
+                                   m_crossChannelMeasureEndPosition.point.y()+m_crossChannelMeasureEndPosition.YOffset);
+            painter.setPen(QPen(QColor::fromRgb(0xe58175), 1));
+            QPainterPath bezier(startPoint);
+            bezier.cubicTo(QPoint((startPoint.x() + endPoint.x()) / 2, startPoint.y()),
+                           QPoint((startPoint.x() + endPoint.x()) / 2, endPoint.y()),
+                           endPoint);
+            painter.drawPath(bezier);
+        }
+        if(m_crossChannelMeasureStartPosition.isHit){
+            QVector<QLine> lines=m_crossChannelHitLines;
+            qint32 XOffset=m_crossChannelMeasureStartPosition.point.x();
+            qint32 YOffset=m_crossChannelMeasureStartPosition.point.y()+m_crossChannelMeasureStartPosition.YOffset;
+            for(auto &i : lines){
+                qint32 xMiddle=XOffset-(i.x2()-i.x1())/2;
+                qint32 yMiddle=YOffset-(i.x2()-i.x1())/2;
+                i.setLine(i.x1()+xMiddle, i.y1()+yMiddle, i.x2()+xMiddle, i.y2()+yMiddle);
+            }
+            painter.drawLines(lines);
+        }
+
+        if(m_crossChannelMeasureEndPosition.isHit){
+            QVector<QLine> lines=m_crossChannelHitLines;
+            qint32 XOffset=m_crossChannelMeasureEndPosition.point.x();
+            qint32 YOffset=m_crossChannelMeasureEndPosition.point.y()+m_crossChannelMeasureEndPosition.YOffset;
+            for(auto &i : lines){
+                qint32 xMiddle=XOffset-(i.x2()-i.x1())/2;
+                qint32 yMiddle=YOffset-(i.x2()-i.x1())/2;
+                i.setLine(i.x1()+xMiddle, i.y1()+yMiddle, i.x2()+xMiddle, i.y2()+yMiddle);
+            }
+            painter.drawLines(lines);
+        }
+        qint64 startPosition=m_crossChannelMeasureStartPosition.position;
+        qint64 endPosition=m_crossChannelMeasureEndPosition.position;
+        if(startPosition>endPosition)
+        {
+            startPosition^=endPosition;
+            endPosition^=startPosition;
+            startPosition^=endPosition;
+        }
+        {
+            //绘制浮窗
+            QString str;
+            if(endPosition-startPosition>0)
+                str=nsToShowStr(endPosition-startPosition, 12)+" / "+hzToShowStr(1000000000./(endPosition-startPosition), 8);
+            else
+                str="0 ns / 0 hz";
+            QFont font=painter.font();
+            painter.setPen(QPen(QColor::fromRgb(0x383838), 0));
+            font.setPixelSize(12);
+            painter.setFont(font);
+            qint32 fontWidth=painter.fontMetrics().horizontalAdvance(str);
+            QPainterPath path;
+            qint32 y=m_crossChannelMeasureEndPosition.mouseY+m_crossChannelMeasureEndPosition.YOffset+22;
+            qint32 x=m_crossChannelMeasureEndPosition.point.x()+10;
+            if(x+fontWidth+25>m_width)
+                x=m_width-fontWidth-25;
+            path.addRoundedRect(QRect(x,y,fontWidth+20,20),6,6);
+            painter.fillPath(path, QBrush(QColor::fromRgba(0xddbcedff)));
+            painter.drawText(x+10,y+13,str);
+        }
+    }
 }
 
 void DrawBackground::onSizeChanged()
@@ -100,5 +161,37 @@ void DrawBackground::setMouseYOffset(qint32 y)
 {
     m_mouseZoomOffsetY=y;
     update();
+}
+
+void DrawBackground::setCrossChannelMeasureState(bool isStop)
+{
+    m_crossChannelMeasureState=!isStop;
+    m_crossChannelMeasureStartPosition=CrossChannelMeasure();
+    m_crossChannelMeasureEndPosition=CrossChannelMeasure();
+    update();
+}
+
+void DrawBackground::setCrossChannelMeasurePosition(qint32 type, qint32 x, qint32 y, qint32 mouseY, qint64 position, bool isHit)
+{
+    if(type==1){
+        m_crossChannelMeasureStartPosition.point=QPoint(x,y);
+        m_crossChannelMeasureStartPosition.position=position;
+        m_crossChannelMeasureStartPosition.isHit=isHit;
+        m_crossChannelMeasureStartPosition.mouseY=mouseY;
+    }else{
+        m_crossChannelMeasureEndPosition.point=QPoint(x,y);
+        m_crossChannelMeasureEndPosition.position=position;
+        m_crossChannelMeasureEndPosition.isHit=isHit;
+        m_crossChannelMeasureEndPosition.mouseY=mouseY;
+    }
+    update();
+}
+
+void DrawBackground::setCrossChannelMeasureYOffset(qint32 type, qint32 YOffset)
+{
+    if(type==1)
+        m_crossChannelMeasureStartPosition.YOffset=YOffset;
+    else
+        m_crossChannelMeasureEndPosition.YOffset=YOffset;
 }
 #pragma endregion}

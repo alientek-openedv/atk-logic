@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import atk.qml.Controls 1.0
 import "./channel"
@@ -25,8 +9,122 @@ Rectangle{
     property int contentYRecode: -1
     property int channelHeight: 62
     property var parentItem
+    property var showChannelStart: 0
     id: main
     color: Config.background2Color
+
+    NumberAnimation on showChannelStart{
+        id: showStartAnimation
+        duration: 100
+        alwaysRunToEnd: false
+        //        easing.type: Easing.OutCubic
+    }
+
+    onShowChannelStartChanged: showRefreshTimer.start();
+
+    Timer{
+        id: showRefreshTimer
+        interval: 120
+        onTriggered: {
+            controller.setShowStart(showChannelStart);
+        }
+    }
+
+    Timer{
+        id: removeDecodeTimer
+        property string decodeName
+        interval: 10
+        onTriggered: sSignal.removeDecode(decodeName,0);
+    }
+
+    Timer{
+        property bool isUp: false
+        property int count: 0
+        id: countXWhellTimer
+        interval: 100
+        onTriggered: {
+            if(count>6){
+                showRefreshTimer.interval=80;
+                showStartAnimation.duration=5000;
+                showStartAnimation.from=showChannelStart;
+                showStartAnimation.to=controller.getXWheelPosition(isUp,20*5);
+                showStartAnimation.start();
+            }else if(count>3){
+                showRefreshTimer.interval=120;
+                showStartAnimation.duration=10000;
+                showStartAnimation.from=showChannelStart;
+                showStartAnimation.to=controller.getXWheelPosition(isUp,20);
+                showStartAnimation.start();
+            }
+        }
+    }
+
+    Timer{
+        property var showStart
+        id: refreshChannelTimer
+        interval: 25
+        onTriggered: {
+            if(sConfig.isExit)
+                return;
+            if(showStart<0){
+                controller.setShowStart(showStart);
+                return;
+            }
+            showStartAnimation.stop();
+            if(showStart===showChannelStart){
+                showRefreshTimer.interval=1;
+                showRefreshTimer.start();
+            }else{
+                showRefreshTimer.interval=1;
+                showStartAnimation.duration=100;
+                showStartAnimation.from=showChannelStart;
+                showStartAnimation.to=controller.getShowStart(showStart);
+                showStartAnimation.start();
+            }
+        }
+    }
+
+    Connections{
+        target: controller
+        function onTimerDrawUpdate(showStart) {
+            refreshChannelTimer.showStart=showStart
+            if(!refreshChannelTimer.running)
+                refreshChannelTimer.start();
+        }
+    }
+
+    Connections{
+        target: sSignal
+        function onChannelXWhell(isUp)
+        {
+            if(sConfig.isLiveFollowingPopupShow)
+                sSignal.setLiveFollowing(2,true);
+            if(showStartAnimation.duration!=100){
+                showStartAnimation.stop();
+                showStartAnimation.duration=100;
+                showRefreshTimer.interval=120;
+            }
+            showStartAnimation.from=controller.getShowStart();
+            showStartAnimation.to=controller.getXWheelPosition(isUp);
+            showStartAnimation.start();
+            if(countXWhellTimer.running && countXWhellTimer.isUp===isUp)
+                countXWhellTimer.count++;
+            else
+                countXWhellTimer.stop();
+
+            if(!countXWhellTimer.running){
+                countXWhellTimer.isUp=isUp;
+                countXWhellTimer.count=1;
+                countXWhellTimer.start();
+            }
+        }
+
+        function onStopXWheel(){
+            countXWhellTimer.stop();
+            showRefreshTimer.stop();
+            showStartAnimation.stop();
+        }
+    }
 
     Flickable{
         id: listviewParentItem
@@ -113,6 +211,8 @@ Rectangle{
         height: width
         z: 5
         enabled: vbar.position!==0
+        imageWidth: 2
+        imageHeight: 4
         imageSource: "resource/icon/"+Config.tp+"/ScrollBarButton.png"
         imageEnterSource: "resource/icon/"+Config.tp+"/ScrollBarButtonEnter.png"
         imageDisableSource: "resource/icon/"+Config.tp+"/ScrollBarButtonDisable.png"
@@ -156,6 +256,8 @@ Rectangle{
         height: width
         z: 5
         enabled: (vbar.position+vbar.size)<1
+        imageWidth: 2
+        imageHeight: 4
         imageSource: "resource/icon/"+Config.tp+"/ScrollBarButton.png"
         imageEnterSource: "resource/icon/"+Config.tp+"/ScrollBarButtonEnter.png"
         imageDisableSource: "resource/icon/"+Config.tp+"/ScrollBarButtonDisable.png"
@@ -255,6 +357,10 @@ Rectangle{
                 return;
             }
             if(typeof(channelID_2)==="string"){
+                if(channelID_2==="DrawBackgroundFloorID"){
+                    sSignal.sendChannelY(channelID_2,type,listviewParentItem.y)
+                    return;
+                }
                 for(let i=0;i<dataModel.count;i++){
                     let lv1=list_view.itemAtIndex(i);
                     let lv1data=dataModel.get(i);
@@ -274,7 +380,7 @@ Rectangle{
                             let lv2item=lv1.list.model.get(j);
                             let top=lv1.y+lv2.y+lv1.list.y-listviewParentItem.contentY+5;
                             if(lv2item.channelID===channelID_2){
-                                if(type===2)
+                                if(type===2 || type===4 || type===5)
                                     sSignal.sendChannelY(channelID_2,type,top)
                                 else if(type===1){
                                     if(top>100)
@@ -347,6 +453,7 @@ Rectangle{
         if(decodeJson["main"]["second"] && decodeJson["main"]["second"].length>0)
             showText=decodeJson["main"]["second"][decodeJson["main"]["second"].length-1];
         var decode={"isDecode":true,"name":showText,"decodeID":decodeID,"colorIndex":decodeJson["main"]["colorIndex"]};
+        //提取通道数据
         for(let i in channelList){
             for(let j=0;j<parentItem.list.model.count;j++){
                 let lv2=parentItem.list.list.itemAtIndex(j);

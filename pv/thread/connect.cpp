@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "connect.h"
+﻿#include "connect.h"
 
 ConnectDevice::ConnectDevice(QObject *parent)
     : QObject{parent}
@@ -43,9 +27,11 @@ void ConnectDevice::CheckDeviceCreanInfo(USBControl *usb, qint32 port)
     bool isActive=false;
     qint32 maxCount=5;
     qint32 schedule=100/maxCount;
+    qint16 deviceVersion=0;
     if(g_updataState==1)
     {
         LogHelp::write(QString("    更新等待:2500ms"));
+        //        usb->RestartMCU();
         QThread::msleep(2500);
         g_updataState=0;
     }
@@ -53,31 +39,64 @@ void ConnectDevice::CheckDeviceCreanInfo(USBControl *usb, qint32 port)
     do{
         Data_* data2 = new Data_();
         usb->GetMCUVersion();
-        while(usb->ReadSynchronous(data2))
-            delete[] data2->buf;
+        {
+            qint32 count_2=0,count_3=0;
+            while(usb->ReadSynchronous(data2)){//清空mcu缓存
+                delete[] data2->buf;
+                if(data2->buf[0]>200 && data2->buf[511]>200){
+                    count_2++;
+                    QThread::msleep(10);
+                    if(count_2>120){
+                        usb->m_deviceVersion=0;
+                        g_isUpdata=1;
+                        usb->EnterBootloader();
+                        delete data2;
+                        return;
+                    }
+                }else{
+                    count_3++;
+                    if(count_3==100)
+                        usb->GetDeviceData(false);
+                    if(count_3>900)
+                        QThread::msleep(10);
+                    if(count_3>1100)
+                        break;
+                }
+            }
+        }
         LogHelp::write(QString("    第%1次尝试连接").arg(QString::number(count+1)));
         LogHelp::write(QString("    获取MCU信息.."));
-        if(mcuVersions==0&&usb->GetMCUVersion() && usb->ReadSynchronous(data2) && data2->len>0){
+        if(mcuVersions==0 && usb->GetMCUVersion() && usb->ReadSynchronous(data2) && data2->len>0){
             if(data2->buf[0]==0x0a && data2->buf[1]==0x81 && data2->buf[2]==0x01){
                 if(data2->buf[3]==0x61)
                 {
                     level=data2->buf[8];
                     mcuVersions=data2->buf[4]*10+data2->buf[5];
+                    deviceVersion=data2->buf[6];
+                    usb->m_deviceVersion=data2->buf[6];
+                    usb->SetResetState(0);
                     usb->SetResetState(1);
                     if(data2->buf)
                     {
                         delete[] data2->buf;
                         data2->buf=nullptr;
                     }
-                    while(usb->ReadSynchronous(data2))
+                    qint32 count_2=0;
+                    while(usb->ReadSynchronous(data2)){//清空mcu缓存
                         delete[] data2->buf;
+                        count_2++;
+                        if(count_2>2000)
+                            break;
+                    }
                     isActive=true;
                 }
                 else if(data2->buf[3]==0x62)
                 {
+                    usb->m_deviceVersion=data2->buf[6];
                     delete[] data2->buf;
                     delete data2;
-                    emit EnterBootloader(port);
+                    g_isUpdata=1;
+                    emit EnterBootloader(port, false);
                     return;
                 }
             }
@@ -100,7 +119,7 @@ void ConnectDevice::CheckDeviceCreanInfo(USBControl *usb, qint32 port)
                             delete[] data2->buf;
                             delete data2;
                             LogHelp::write(QString("    FPGA状态异常"));
-                            emit SendDeviceCreanInfo("","",port,0,0,0,1);
+                            emit SendDeviceCreanInfo("","",port,0,0,0,0,1);
                             return;
                         }
                         if(*(data.pData+3)==2)
@@ -113,12 +132,12 @@ void ConnectDevice::CheckDeviceCreanInfo(USBControl *usb, qint32 port)
                         {
                             delete[] data2->buf;
                             delete data2;
-                            emit SendDeviceCreanInfo("","",port,0,0,0,6);
+                            emit SendDeviceCreanInfo("","",port,0,0,0,0,6);
                             return;
                         }else if(APP_VERSION_NUM<minVersion){
                             delete[] data2->buf;
                             delete data2;
-                            emit SendDeviceCreanInfo("","",port,0,0,0,7);
+                            emit SendDeviceCreanInfo("","",port,0,0,0,0,7);
                             return;
                         }
                         QByteArray array((const char *)(data.pData+9),data.ullLen-9);
@@ -138,16 +157,16 @@ void ConnectDevice::CheckDeviceCreanInfo(USBControl *usb, qint32 port)
         if(count>maxCount || usb->m_NoDevice)
             break;
         emit SendConnectSchedule(qMin(count*schedule,99),0);
-    }while(name=="" || usbName=="NULL" || mcuVersions==0 || fpgaVersions==0);
+    }while(name=="" || usbName=="NULL" || mcuVersions==0 || fpgaVersions==0 || deviceVersion==0);
     usb->m_busy=false;
     if(count>maxCount){
         LogHelp::write(QString("    设备连接异常"));
-        emit SendDeviceCreanInfo("","",port,0,0,0,2);
+        emit SendDeviceCreanInfo("","",port,0,0,0,0,2);
         return;
     }
     if(usb->m_NoDevice){
         LogHelp::write(QString("    设备断开"));
-        emit SendDeviceCreanInfo("","",port,0,0,0,3);
+        emit SendDeviceCreanInfo("","",port,0,0,0,0,3);
         return;
     }else{
         usb->CloseAllPWM();
@@ -162,9 +181,10 @@ void ConnectDevice::CheckDeviceCreanInfo(USBControl *usb, qint32 port)
         }
         delete data2;
     }
-    LogHelp::write(QString("    设备连接成功:%1,%2,MFW:%3,FFW:%4").arg(name+(level==1?" Plus":""),QString::number(port),
-                                                                 QString::number(mcuVersions),QString::number(fpgaVersions)));
-    emit SendDeviceCreanInfo(name,usbName,port,mcuVersions,fpgaVersions,level,0);
+    LogHelp::write(QString("    设备连接成功:%1,%2,MFW:%3,FFW:%4,HFW:%5").arg(name+(level==1?" Plus":""),QString::number(port),
+                                                                 QString::number(mcuVersions),QString::number(fpgaVersions),
+                                                                        QString::number(deviceVersion)));
+    emit SendDeviceCreanInfo(name,usbName,port,mcuVersions,fpgaVersions,deviceVersion,level,0);
 }
 
 void ConnectDevice::CheckUpdate(int version, bool isShowError)
@@ -175,18 +195,26 @@ void ConnectDevice::CheckUpdate(int version, bool isShowError)
     m_MCUVersion=version;
     m_isShowError=isShowError;
     m_type=CheckType::Application;
-    m_netManger->get(QNetworkRequest(QUrl("")));
+    m_netManger->get(QNetworkRequest(QUrl(DataService::getInstance()->m_downloadPath+"/Version.txt")));
 }
 
-void ConnectDevice::CheckHardwareUpdate(int MCUVersion, int FPGAVersion)
+void ConnectDevice::CheckHardwareUpdate(int MCUVersion, int FPGAVersion, int deviceVersion)
 {
     LogHelp::write(QString("检查硬件更新"));
     while(!m_updateMutex.tryLock(10))
         QApplication::processEvents(QEventLoop::AllEvents, 100);
     m_MCUVersion=MCUVersion;
     m_FPGAVersion=FPGAVersion;
+    m_deviceVersion=deviceVersion;
     m_type=CheckType::Hardware;
-    m_netManger->get(QNetworkRequest(QUrl("")));
+    switch (m_deviceVersion) {
+    case 1:
+        m_netManger->get(QNetworkRequest(QUrl(DataService::getInstance()->m_downloadPath+"/Version_Hardware.txt")));
+        break;
+    case 2:
+        m_netManger->get(QNetworkRequest(QUrl(DataService::getInstance()->m_downloadPath+"/Version_Hardware_2.txt")));
+        break;
+    }
 }
 
 void ConnectDevice::finishedSlot(QNetworkReply *reply)

@@ -3,6 +3,7 @@
 ##
 ## Copyright (C) 2011 Gareth McMullin <gareth@blacksphere.co.nz>
 ## Copyright (C) 2012-2020 Uwe Hermann <uwe@hermann-uwe.de>
+## Copyright (C) 2023 ALIENTEK(正点原子) <xiaoshitou@39035605@qq.com>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -164,12 +165,13 @@ class Decoder(srd.Decoder):
         if key == srd.SRD_CONF_SAMPLERATE:
             self.samplerate = value
             self.signalling = self.options['signalling']
-            if self.signalling != 'automatic':
-                self.update_bitrate()
+            
+            self.update_bitrate()
 
     def update_bitrate(self):
-        self.bitrate = bitrates[self.signalling]
-        self.bitwidth = float(self.samplerate) / float(self.bitrate)
+        if self.signalling != 'automatic':
+            self.bitrate = bitrates[self.signalling]
+            self.bitwidth = float(self.samplerate) / float(self.bitrate)
 
     def putpx(self, data):
         s = self.samplenum_edge
@@ -294,12 +296,15 @@ class Decoder(srd.Decoder):
             self.putpb(['KEEP ALIVE', None])
             self.putb([9, ['Keep-alive', 'KA', 'A']])
 
-        if sym == 'FS_J':
+        if self.options['signalling'] == 'automatic' and sym == 'FS_J':
             self.signalling = 'full-speed'
-            self.update_bitrate()
-        elif sym == 'LS_J':
+        elif self.options['signalling'] == 'automatic' and sym == 'LS_J':
             self.signalling = 'low-speed'
-            self.update_bitrate()
+        else:
+            self.signalling = self.options['signalling']
+
+        self.update_bitrate()
+
         self.oldsym = 'J'
         self.state = St.IDLE
 
@@ -326,8 +331,10 @@ class Decoder(srd.Decoder):
                 self.edgepins = pins
             elif self.state in (St.GET_BIT, St.GET_EOP):
                 # Wait until we're in the middle of the desired bit.
-                self.edgepins = self.wait([{'skip': self.samplenum_edge - self.samplenum}])
-                pins = self.wait([{'skip': self.samplenum_target - self.samplenum}])
+                if (self.samplenum_edge > self.samplenum):
+                    self.edgepins = self.wait([{'skip': self.samplenum_edge - self.samplenum}])
+                if (self.samplenum_target > self.samplenum):
+                    pins = self.wait([{'skip': self.samplenum_target - self.samplenum}])
 
                 sym = symbols[self.signalling][pins]
                 if self.state == St.GET_BIT:

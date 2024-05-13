@@ -1,29 +1,13 @@
-/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
 Rectangle{
     property string titleText
     property string showText
-    property int type: 0
+    property int type: 0//0=确定，1=保存
     property bool showCancel: false
-    property int lastButton: -1
+    property int lastButton: -1//0=取消，1=确定，2=立即退出，3=×按钮
     property alias isNotShow: notShowCheckBox.isCheck
 
     id: rootControl
@@ -50,6 +34,8 @@ Rectangle{
     Image {
         anchors.centerIn: parent
         source: "../../resource/image/MessageDropShadow.png"
+        width: 416
+        height: 216
         Rectangle{
             id: mainRectangle
             width: 400
@@ -106,6 +92,7 @@ Rectangle{
                 id: imageIcon
                 width: 24
                 height: 24
+                fillMode: Image.PreserveAspectFit
                 anchors{
                     left: parent.left
                     leftMargin: 10

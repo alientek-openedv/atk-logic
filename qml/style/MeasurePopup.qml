@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.13
+﻿import QtQuick 2.13
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -23,7 +7,7 @@ Rectangle {
 
     id: rootItem
     height: bottomRectangle.height+showRectangle.height-8
-    width: 400
+    width: 380
     visible: (set.isTop||set.isSelect)&&set.isShow
     z: set.isSelect?2500:set.isTop?2000:2
     radius: 8
@@ -74,6 +58,7 @@ Rectangle {
             controller.setMeasureSelect(set.data.measureID);
     }
 
+    //阻止滚轮事件往下传播
     MouseArea{
         anchors.fill: parent
         preventStealing: true
@@ -96,6 +81,7 @@ Rectangle {
             isSelect=data.isSelect
             if(!isTop)
                 isShow=calcOffsetShow(data.offset)
+            //文本赋值
             nameText.text=data.name;
             timeText.text=": "+data.time;
             timeTextToolTip.showText=data.timeDetail;
@@ -120,6 +106,8 @@ Rectangle {
                 fMaxTextToolTip.showText=data.maxFreqDetail;
                 fallingText.text=": "+data.falling;
             }
+
+            //属性操控
             if(data.isAutoOffset && visible)
             {
                 rootItem.x=data.offset;
@@ -169,6 +157,8 @@ Rectangle {
     Component.onCompleted: {
         sSignal.measureRefreshData(measureID);
     }
+
+    //使用时钟隐藏，否则隐藏时更改图片不生效
     Timer{
         id: showTimer
         interval: 50
@@ -189,7 +179,7 @@ Rectangle {
         border.color: color
         radius: 8
         width: parent.width-2
-        height: 111
+        height: 95
         z: 10
         anchors{
             left: parent.left
@@ -252,6 +242,8 @@ Rectangle {
                     id: topButton
                     width: 15
                     height: 15
+                    imageWidth: 11
+                    imageHeight: 11
                     imageSource: "resource/icon/"+Config.tp+"/Top.png"
                     imageEnterSource: imageSource
                     onPressed: {
@@ -263,6 +255,8 @@ Rectangle {
                     id: copyButton
                     width: 15
                     height: 15
+                    imageWidth: 12
+                    imageHeight: 12
                     imageSource: "resource/icon/"+Config.tp+"/Copy.png"
                     imageEnterSource: imageSource
                     onPressed: {
@@ -271,6 +265,7 @@ Rectangle {
                         str+=startTitleText.text+"\t"+startText.text+"\t"+endTitleText.text+"\t"+endText.text+"\n"
                         str+=fMinTitleText.text+"\t"+fMinText.text+(startText.text.length===11&&fMinText.text.length!=11?"\t\t":"\t")+fMaxTitleText.text+"\t"+fMaxText.text+"\n"
                         str+=risingTitleText.text+"\t"+risingText.text+(startText.text.length===11&&risingText.text.length!=11?"\t\t":"\t")+fallingTitleText.text+"\t"+fallingText.text+"\n"
+                        str+=noteEdit.showText+"\n";
                         clipboard.setText(str);
                         recoverTimer.start();
                     }
@@ -559,6 +554,9 @@ Rectangle {
                     bottom: noteEdit.bottom
                 }
                 Image {
+                    width: 7
+                    height: 7
+                    fillMode: Image.PreserveAspectFit
                     anchors.centerIn: parent
                     source: "../../resource/icon/Drag.png"
                 }

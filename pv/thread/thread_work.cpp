@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "thread_work.h"
+﻿#include "thread_work.h"
 
 ThreadWork::ThreadWork(QObject *parent)
     : QObject{parent}
@@ -100,6 +84,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
         delete temp;
         m_dataList.pop_front();
     }
+    //启动读线程
     ThreadRead m_usbReadThread;
     {
         qint32 maxTransferSize=16;
@@ -111,19 +96,21 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
     }
     emit SendDeviceRecvSchedule(0,0,1);
     qint32 channelID,multiply=segment->GetMultiply();
-    QVector<quint64> channelDataPosition;
+    QVector<quint64> channelDataPosition;//通道当前位置记录
     qint64 channelDataCount=0;
     qint32 missCount=0;
     qint32 scheduleRecode=-1,triggerScheduleRecode=-1;
     quint64 vernierTriggerPosition=0;
-    bool isExceedCapacity=false,isExceedBandwidth=false;
+    bool isExceedCapacity=false,isExceedBandwidth=false,isOffsetOrder=false;
     const static QString errorMsg=QObject::tr("数据异常，请重连硬件再次尝试。");
     QVector<quint32> dataCount;
     const static qint32 rleSize=512*1024;
-    quint8* rleBuffer=new quint8[rleSize];
-    quint8* offsetBuffer=new quint8[rleSize];
+    quint8* rleBuffer=new quint8[rleSize];//rle解压数据
+    quint8* offsetBuffer=new quint8[rleSize];//rle解压数据
+    bool isSendClose=false, isSetTime=false;
     memset(rleBuffer,0,rleSize);
     memset(offsetBuffer,0,rleSize);
+    //    uint64_t t1=GetTickCount_();
     try {
         if(IDList->count()<1)
             throw QObject::tr("开启通道数量错误");
@@ -145,6 +132,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                 if (data!=nullptr)
                 {
                     if (data->len > 0) {
+                        //数据拼接
                         bool isAddData=false;
                         Data_* data2=new Data_();
                         if(m_dataBuffer!=nullptr&&m_dataBuffer->len>0)
@@ -165,12 +153,20 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                         }
                         Analysis analysis(data2->buf,data2->len);
                         AnalysisData analysisData=analysis.getNextData();
+
                         while(analysisData.order!=-1&&isRun()&&usb->m_ThreadState==1){
+                            //获取通道ID，占2字节
                             channelID = *analysisData.pData;
                             missCount=0;
                             switch(analysisData.order){
                             case 1:
                             {
+                                if(!isBuffer && !isSendClose){
+                                    isSendClose=true;
+                                    emit SendDeviceRecvSchedule(1,7,1);
+                                }
+
+                                //循环当前取出的所有数据
                                 quint8* data_=analysisData.pData+2;
                                 quint32 datalen=analysisData.ullLen-2;
                                 if(isRLE){
@@ -184,6 +180,8 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                                     data_=rleBuffer;
                                     datalen=current;
                                 }
+
+                                //过滤掉所有字节，剩余不够1字节删的再记录
                                 if(segment->GetStartOffsetSampling(channelID)>7){
                                     qint64 offset=segment->GetStartOffsetSampling(channelID);
                                     qint32 removeByte=offset/8;
@@ -231,10 +229,15 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                             }
                             case 3:
                             {
+                                if(isOffsetOrder)
+                                    throw QObject::tr("指令异常，请重连硬件再次尝试。");
+                                else
+                                    isOffsetOrder=true;
                                 quint8* pBuffer=new quint8[8];
                                 quint8* pTemp=analysisData.pData+2;
                                 memset(pBuffer,0,8);
                                 qint32 len=analysisData.ullLen-2;
+                                //触发偏移
                                 if(len>=5){
                                     pBuffer[0]=*(pTemp);
                                     pBuffer[1]=*(pTemp+1);
@@ -245,6 +248,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                                 }else throw errorMsg;
                                 len-=5;
                                 LogHelp::write(QString("    收到偏移指令:%1，数据长度:%2").arg(QString::number(vernierTriggerPosition),QString::number(analysisData.ullLen)));
+                                //数据裁剪
                                 if(isBuffer){
                                     QVector<quint64> countArr;
                                     LogHelp::write(QString("    数据裁剪:"));
@@ -268,7 +272,10 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                                                            " 上采样深度:"+QString::number(segment->m_SamplingDepth)+" 上触发点:"+
                                                            QString::number(segment->m_TriggerSamplingDepth));
                                         }
-                                    }else throw errorMsg;
+                                    }else {
+                                        delete[] pBuffer;
+                                        throw errorMsg;
+                                    }
                                     len-=usb->m_ChannelCount*5;
                                     if(isRLE){
                                         if(len>=1){
@@ -297,7 +304,10 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                                                 setRun(2);
                                             }
                                             pTemp++;
-                                        }else throw errorMsg;
+                                        }else {
+                                            delete[] pBuffer;
+                                            throw errorMsg;
+                                        }
                                     }
                                 }
                                 delete[] pBuffer;
@@ -305,6 +315,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                             }
                             case 4:
                             {
+                                //答复指令
                                 if(analysisData.ullLen-2>=1){
                                     quint8 order=*(analysisData.pData+2);
                                     LogHelp::write(QString("    收到应答指令:%1").arg(QString::number(order)));
@@ -319,6 +330,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                             }
                             case 6:
                             {
+                                //完成传输指令
                                 if(usb->m_ThreadState!=0){
                                     LogHelp::write("    收到结束指令");
                                     usb->m_ThreadState=0;
@@ -334,6 +346,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                             }
                             case 5:
                             {
+                                //获取采集/触发进度数据
                                 if(analysisData.ullLen-2>=5){
                                     quint8* pBuffer=new quint8[8];
                                     memset(pBuffer,0,8);
@@ -344,18 +357,25 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                                     pBuffer[4]=*(analysisData.pData+6);
                                     quint64 temp=*((quint64*)pBuffer);
                                     delete[] pBuffer;
+                                    //获取采集进度数据
                                     if(isBuffer)
                                     {
                                         qint32 schedule=qMin((quint64)((temp/(qreal)segment->m_SamplingDepth)*100),100ull);
                                         if(triggerScheduleRecode!=schedule)
                                         {
-                                            emit SendDeviceRecvSchedule(schedule,temp>segment->m_TriggerSamplingDepth?2:segment->m_TriggerSamplingDepth-temp<16?1:0,1);
+                                            if(!isSetTime && temp>segment->m_TriggerSamplingDepth){
+                                                isSetTime=true;
+                                                segment->m_triggerDate=QDateTime::currentDateTime();
+                                                segment->m_triggerDate=segment->m_triggerDate.addMSecs(-(double)segment->m_TriggerSamplingDepth/segment->GetSamplingFrequency());
+                                            }
+                                            emit SendDeviceRecvSchedule(schedule,temp>segment->m_TriggerSamplingDepth?2:segment->m_TriggerSamplingDepth-temp<16?1:0,1);//获取采集前触发进度数据
                                             triggerScheduleRecode=schedule;
                                         }
                                     }
                                     else
-                                        emit SendDeviceRecvSchedule(1,1,1);
+                                        emit SendDeviceRecvSchedule(1,temp==0?1:7,1);
                                 }else throw errorMsg;
+
                                 break;
                             }
                             }
@@ -369,6 +389,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                     if (data->buf != nullptr)
                         delete[] data->buf;
                     delete data;
+                    //live模式
                     if(!isBuffer)
                     {
                         quint64 minDataPosition=~0ull;
@@ -378,7 +399,12 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                         }
                         if(minDataPosition>0)
                             minDataPosition--;
-                        qint64 showStart=minDataPosition*8*multiply-config->m_width*config->m_showConfig.m_pixelUnit;
+                        qint64 showStart=minDataPosition*8;
+                        qint64 tmp=showStart>>23;
+                        tmp<<=23;
+                        emit decodeToPosition(tmp, segment->m_SamplingDepth);
+                        showStart*=multiply;
+                        showStart-=config->m_width*config->m_showConfig.m_pixelUnit;
                         if(showStart<0)
                             showStart=0;
                         emit timerDrawUpdate(m_liveFollowing?showStart:-1);
@@ -428,7 +454,20 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
             else
                 maxSample--;
             config->m_maxUnit=maxSample*multiply;
+            if(!isBuffer){
+                if(segment->m_enableGlitchRemoval)
+                    emit decodeToPosition(-1, -1);
+                else
+                    emit decodeToPosition(maxSample, maxSample);
+            }
+
+        }else if(!isBuffer){
+            if(segment->m_enableGlitchRemoval)
+                emit decodeToPosition(-1, -1);
+            else
+                emit decodeToPosition(segment->m_SamplingDepth, segment->m_SamplingDepth);
         }
+
         LogHelp::write(QString("    等待停止读取线程"));
         m_usbReadThread.stop();
         usb->Stop();
@@ -438,6 +477,8 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
         for(quint32 i=0;i<dataCount.count();i++){
             LogHelp::write(QString("        通道:%1 数据量:%2").arg(QString::number(i),QString::number(dataCount[i])));
         }
+
+        //删除缓冲区
         while(!m_dataList.isEmpty()){
             Data_* data2=m_dataList.first();
             m_dataList.pop_front();
@@ -445,12 +486,19 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
                 delete[] data2->buf;
             delete data2;
         }
+        //清空MCU
         Data_* data = new Data_();
-        while(usb->ReadSynchronous(data))
+        qint32 count_=0;
+        while(usb->ReadSynchronous(data)){//启动前清空mcu缓存
             delete[] data->buf;
+            count_++;
+            if(count_>1000)
+                break;
+        }
         delete data;
         for(qint32 i=0;i<segment->GetChannelNum();i++)
             segment->m_isFirst[i]=true;
+
         if(isRLE){
             for(qint32 i=0;i<IDList->count();i++){
                 QVector<Segment::_Node>* dataList=segment->GetChannelDataList(IDList->at(i));
@@ -508,6 +556,7 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
     delete IDList;
     segment->lessenCite();
     emit SendDeviceRecvSchedule(100,3,usb->m_ThreadState==0&&isRun()?1:0);
+
     LogHelp::write(QString("    采集任务线程退出"));
     if(isExceedBandwidth)
         m_sessionError->setError_msg(QObject::tr("采集的数据超出硬件带宽上限，数据异常。"));
@@ -522,24 +571,13 @@ void ThreadWork::DeviceRecvThread(USBControl *usb, Segment* segment, SessionConf
 
 void ThreadWork::SaveFileThreadPara(QString filePath, Segment *segment, QVector<QString> channelsName)
 {
+    SharedMemoryHelper* shared=&DataService::getInstance()->m_shared;
+    shared->increase(SAVE_FILE);
     LogHelp::write(QString("    保存文件线程启动"));
     setRun(1);
     segment->appendCite();
     bool isError=false;
-    QString path=QDir::tempPath()+"/ATK-Logic/temp/save/";
-    {
-        QDir savePath(path);
-        savePath.mkpath(path);
-
-        QString temp;
-        bool isExists;
-        do{
-            temp=QString::number(QDateTime::currentSecsSinceEpoch());
-            QDir savePath(path+temp);
-            isExists=savePath.exists();
-        }while(isExists);
-        path+=temp+".csv";
-    }
+    QString path=creanTimestampDir(DataService::getInstance()->m_tempDir+"/temp/save/",true);
     QFile* file=new QFile(path);
     try{
         emit SendDeviceRecvSchedule(0,4,1);
@@ -561,6 +599,7 @@ void ThreadWork::SaveFileThreadPara(QString filePath, Segment *segment, QVector<
             QVector<bool> outChannelsComplete;
             QVector<qint8> channelsData;
             qint32 channelsNum=0;
+            QDateTime time=segment->m_triggerDate, time2;
             for(qint32 i=0;i<segment->isData.count();i++){
                 if(segment->isData.at(i))
                 {
@@ -576,12 +615,13 @@ void ThreadWork::SaveFileThreadPara(QString filePath, Segment *segment, QVector<
             out<<"; ChannelsType: "<<QString::number(channelsNum)<<"\n";
             out<<"; Sample rate: "<<hzToShowStr(segment->GetSamplingFrequency()*1000)<<"\n";
             out<<"; Sample count: "<<bitToShowStr(segment->m_SamplingDepth)<<"\n";
-            out<<"Time(s)";
+            out<<"; Sampling time: "<<segment->m_collectDate.toString("yyyy-MM-dd hh:mm:ss.zzz")<<"\n";
+            out<<"SystemTime, Time(s)";
             for(auto i : outChannels){
                 out<<", "<<channelsName[i];
             }
             out<<"\n";
-            out<<"0";
+            out<<"'"<<time.toString("yyyy-MM-dd hh:mm:ss.zzz,")<<"0";
             for(qint32 i=0;i<outChannels.count();i++){
                 qint8 temp=segment->GetSample(0,outChannels[i]);
                 out<<","<<temp;
@@ -593,7 +633,7 @@ void ThreadWork::SaveFileThreadPara(QString filePath, Segment *segment, QVector<
             quint64 currentMax,currentMaxRecode=0;
             qint32 schedule=0;
             QVector<int> currentMaxIndex;
-            quint64 maxSample=1000;
+            quint64 maxSample=1000,t;
             for(qint32 i=0;i<segment->GetChannelNum();i++){
                 quint64 temp=segment->GetMaxSample(i);
                 if(temp>maxSample)
@@ -624,14 +664,16 @@ void ThreadWork::SaveFileThreadPara(QString filePath, Segment *segment, QVector<
                 currentMaxRecode=currentMax;
                 for(qint32 i=0;i<currentMaxIndex.count();i++){
                     channelsData[currentMaxIndex[i]]=segment->GetSample(currentMax,outChannels[currentMaxIndex[i]]);
-                    DataEnd temp=segment->GetDataEnd(outChannelsPosition[currentMaxIndex[i]],currentMaxIndex[i],false);
+                    DataEnd temp=segment->GetDataEnd(outChannelsPosition[currentMaxIndex[i]],outChannels[currentMaxIndex[i]],false);
                     outChannelsPosition[currentMaxIndex[i]]=temp.position;
                     outChannelsComplete[currentMaxIndex[i]]=temp.isEnd;
                 }
-                out<<moveDecimal(currentMax*multiply,9);
-                for(qint32 i=0;i<outChannels.count();i++){
-                    out<<","<<(outChannelsComplete[i]?0:channelsData[i]);
-                }
+                t=currentMax*multiply;
+                time2=time.addMSecs(t/1000000.);
+                out<<"'"<<time2.toString("yyyy-MM-dd hh:mm:ss.zzz")<<QString("%1").arg(t%1000000, 6, 10, QLatin1Char('0'))<<",";
+                out<<moveDecimal(t,9);
+                for(qint32 i=0;i<outChannels.count();i++)
+                    out<<","<<channelsData[i];
                 out<<"\n";
                 start=currentMax;
                 qint32 scheduleTemp=qMin((qint32)(currentMax/(qreal)end*100),99);
@@ -684,38 +726,31 @@ end:
     segment->lessenCite();
     emit SendDeviceRecvSchedule(100,4,isRun()&&!isError?1:0);
     setRun(0);
+    shared->decrement(SAVE_FILE);
 }
 
 void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName, Segment *segment,
                                           QVector<QString> channelsName, QVector<MeasureData>* measureList, QVector<VernierData>* vernierList,
                                           QHash<QString,DecodeController*>* decodes)
 {
+    SharedMemoryHelper* shared=&DataService::getInstance()->m_shared;
+    shared->increase(SAVE_FILE);
     LogHelp::write(QString("    保存工程文件线程启动"));
+    ZipHelper zip;
+    connect(&zip,&ZipHelper::sendZipDirSchedule,this,&ThreadWork::sendZipDirSchedule);
     setRun(1);
     segment->appendCite();
-    QString path=QDir::tempPath()+"/ATK-Logic/temp/save/";
+    QString path=creanTimestampDir(DataService::getInstance()->m_tempDir+"/temp/save/");
     try {
         emit SendDeviceRecvSchedule(0,4,1);
-        {
-            QString temp;
-            bool isExists;
-            do{
-                temp=QString::number(QDateTime::currentSecsSinceEpoch());
-                QDir savePath(path+temp);
-                isExists=savePath.exists();
-                if(!isExists)
-                    savePath.mkpath(path+temp);
-            }while(isExists);
-            path+=temp;
-        }
         emit saveSessionSettings(path);
         QFile setFile(path+"/channel.ini");
         if(!setFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
             throw QObject::tr("生成通道配置文件失败。");
         QTextStream setStream(&setFile);
-        setStream.setCodec(QTextCodec::codecForName("GBK"));
+        setStream.setCodec(QTextCodec::codecForName("UTF-8"));
         setStream<<"SessionName="<<sessionName<<"\n";
-        
+        //判断是否有毛刺过滤
         if(segment->m_enableGlitchRemoval){
             setStream<<"GlitchRemoval=";
             for(qint32 i=0;i<segment->GetChannelNum();i++){
@@ -725,15 +760,17 @@ void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName,
             }
             setStream<<"\n";
         }
+        //保存常用参数
         setStream<<"SamplingFrequency="<<QString::number(segment->GetSamplingFrequency())<<"\n";
         setStream<<"SamplingDepth="<<QString::number(segment->m_SamplingDepth)<<"\n";
         setStream<<"TriggerSamplingDepth="<<QString::number(segment->m_TriggerSamplingDepth)<<"\n";
+        //保存测量功能
         if(measureList->count()){
             QFile writeFile(path+"/measure.ini");
             if(!writeFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
                 throw QObject::tr("生成测量配置文件失败。");
             QTextStream writeStream(&writeFile);
-            writeStream.setCodec(QTextCodec::codecForName("GBK"));
+            writeStream.setCodec(QTextCodec::codecForName("UTF-8"));
             for(qint32 i=0;i<measureList->count();i++){
                 auto tmp=measureList->at(i);
                 writeStream<<tmp.name<<","<<QString::number(tmp.channelID)<<","<<
@@ -745,12 +782,13 @@ void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName,
             writeFile.flush();
             writeFile.close();
         }
+        //保存游标功能
         if(vernierList->count()){
             QFile writeFile(path+"/vernier.ini");
             if(!writeFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
                 throw QObject::tr("生成测量配置文件失败。");
             QTextStream writeStream(&writeFile);
-            writeStream.setCodec(QTextCodec::codecForName("GBK"));
+            writeStream.setCodec(QTextCodec::codecForName("UTF-8"));
             for(qint32 i=0;i<vernierList->count();i++){
                 auto tmp=vernierList->at(i);
                 writeStream<<tmp.name<<","<<QString::number(qRgb(tmp.dataColor.red(), tmp.dataColor.green(), tmp.dataColor.blue()),16)<<","<<
@@ -760,30 +798,32 @@ void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName,
             writeFile.flush();
             writeFile.close();
         }
-        {
-            QHash<QString,DecodeController*>::const_iterator it = decodes->constBegin();
-            setStream<<"Decodes=";
-            bool isFirstDecode=true;
-            while (it != decodes->constEnd()) {
-                QJsonDocument doc(it.value()->getJsonObject());
-                if(isFirstDecode)
-                    isFirstDecode=false;
-                else
-                    setStream<<",";
-                setStream<<it.key();
-                QFile writeFile(path+"/"+it.key());
-                if(!writeFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
-                    throw QObject::tr("生成协议数据文件失败。");
-                QTextStream writeStream(&writeFile);
-                writeStream.setCodec(QTextCodec::codecForName("GBK"));
-                writeStream<<QString(doc.toJson(QJsonDocument::Indented));
-                writeStream.flush();
-                writeFile.flush();
-                writeFile.close();
-                ++it;
-            }
-            setStream<<"\n";
-        }
+        //        //保存协议信息
+        //        {
+        //            QHash<QString,DecodeController*>::const_iterator it = decodes->constBegin();
+        //            setStream<<"Decodes=";
+        //            bool isFirstDecode=true;
+        //            while (it != decodes->constEnd()) {
+        //                QJsonDocument doc(it.value()->getJsonObject());
+        //                if(isFirstDecode)
+        //                    isFirstDecode=false;
+        //                else
+        //                    setStream<<",";
+        //                setStream<<it.key();
+        //                QFile writeFile(path+"/"+it.key());
+        //                if(!writeFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+        //                    throw QObject::tr("生成协议数据文件失败。");
+        //                QTextStream writeStream(&writeFile);
+        //                writeStream.setCodec(QTextCodec::codecForName("UTF-8"));
+        //                writeStream<<QString(doc.toJson(QJsonDocument::Indented));
+        //                writeStream.flush();
+        //                writeFile.flush();
+        //                writeFile.close();
+        //                ++it;
+        //            }
+        //            setStream<<"\n";
+        //        }
+        //保存通道数据
         qreal channelSchedule=99/segment->GetChannelNum();
         for(qint32 i=0;i<segment->GetChannelNum();i++){
             QDir savePath(path+"/"+QString::number(i));
@@ -794,15 +834,20 @@ void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName,
             if(!channelSetFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
                 throw QObject::tr("生成通道%1配置文件失败。").arg(QString::number(i));
             QTextStream channelSetStream(&channelSetFile);
-            channelSetStream.setCodec(QTextCodec::codecForName("GBK"));
+            channelSetStream.setCodec(QTextCodec::codecForName("UTF-8"));
             qreal channelSchedule2=channelSchedule/dataList->count();
+            //写出通道名
             channelSetStream<<channelsName[i]<<"\n";
+            //写出数据偏移
             channelSetStream<<QString::number(segment->GetStartOffsetSampling(i))<<"\n";
+            //写出最大长度
             channelSetStream<<QString::number(segment->GetMaxSample(i,false))<<"\n";
+
+            //写出tog和value
             for(qint32 ii=0;ii<dataList->count();ii++){
                 channelSetStream<<dataList->at(ii).tog<<","<<dataList->at(ii).value<<"\n";
                 for(quint32 j=0;j<segment->m_NODE_DATA_SIZE;j++){
-                    if(dataList->at(ii).lbp[j]){
+                    if(dataList->at(ii).lbp[j]!=nullptr){
                         QFile file(path+"/"+QString::number(i)+"/"+QString::number(ii)+"-"+QString::number(j)+".bin");
                         if(!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
                             throw QObject::tr("生成原始文件失败。");
@@ -831,7 +876,7 @@ void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName,
             QApplication::processEvents(QEventLoop::AllEvents, 100);
         if(isRun())
         {
-            if(!zipDir(path,path+".atkdl"))
+            if(!zip.zipDir(path,path+".atkdl"))
                 throw QObject::tr("生成压缩文件失败。");
             else{
                 bool isError=false;
@@ -869,32 +914,25 @@ void ThreadWork::SaveSourceFileThreadPara(QString filePath, QString sessionName,
         }
     } catch (...) {
     }
+    shared->decrement(SAVE_FILE);
 }
 
 void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, SessionConfig *config,
                                           QVector<MeasureData>* measureList, QVector<VernierData>* vernierList,
-                                          QHash<QString,DecodeController*>* decodes, QVector<QString>* channelsNames)
+                                          QHash<QString,DecodeController*>* decodes, QVector<QString>* channelsNames, bool isSendDecode)
 {
+    SharedMemoryHelper* shared=&DataService::getInstance()->m_shared;
+    shared->increase(LOAD_FILE);
     LogHelp::write(QString("    加载工程文件线程启动"));
-    QString errorStr="",glitchString="";
+    QString glitchString="";
+    ZipHelper zip;
+    connect(&zip,&ZipHelper::sendUnZipDirSchedule,this,&ThreadWork::sendUnZipDirSchedule);
     setRun(1);
     segment->appendCite();
     try {
         emit SendDeviceRecvSchedule(0,5,1);
-        uint64_t t1=GetTickCount_();
-        QStringList decodes;
-        QString path=QDir::tempPath()+"/ATK-Logic/temp/load/";
-        {
-            QString temp;
-            bool isExists;
-            do{
-                temp=QString::number(QDateTime::currentSecsSinceEpoch());
-                QDir savePath(path+temp);
-                isExists=savePath.exists();
-            }while(isExists);
-            path+=temp;
-        }
-        if(!unZipDir(filePath,path))
+        QString path=creanTimestampDir(DataService::getInstance()->m_tempDir+"/temp/load/");
+        if(!zip.unZipDir(filePath,path))
             throw QObject::tr("解压缩文件失败。");
         QFile setFile(path+"/channel.ini");
         if(setFile.exists())
@@ -902,7 +940,7 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
             if(!setFile.open(QIODevice::ReadOnly | QIODevice::Text))
                 throw QObject::tr("读取通道配置文件失败。");
             QTextStream setStream(&setFile);
-            setStream.setCodec(QTextCodec::codecForName("GBK"));
+            setStream.setCodec(QTextCodec::codecForName("UTF-8"));
             do{
                 QStringList strArr=setStream.readLine().split("=");
                 if(strArr.count()==2){
@@ -910,8 +948,23 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
                         emit loadSessionSettings(strArr[1], path);
                     else if(strArr[0]=="GlitchRemoval" && strArr[1].contains(","))
                         glitchString=strArr[1];
-                    else if(strArr[0]=="Decodes")
-                        decodes.append(strArr[1].split(","));
+                    else if(strArr[0]=="Decodes"){
+                        //读取协议解码
+                        QStringList decodes=strArr[1].split(",");
+                        for(qint32 i=0;i<decodes.count();i++){
+                            if(!decodes[i].isEmpty()){
+                                QFile readFile(path+"/"+decodes[i]);
+                                if(readFile.exists()){
+                                    if(!readFile.open(QIODevice::ReadOnly | QIODevice::Text))
+                                        throw QObject::tr("读取协议文件失败。");
+                                    QTextStream readStream(&readFile);
+                                    readStream.setCodec(QTextCodec::codecForName("UTF-8"));
+                                    emit appendDecode(readStream.readAll(),false);
+                                    readFile.close();
+                                }
+                            }
+                        }
+                    }
                     else if(strArr[0]=="SamplingFrequency")
                         segment->SetSamplingFrequency(strArr[1].toULongLong());
                     else if(strArr[0]=="SamplingDepth")
@@ -920,13 +973,14 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
                         segment->m_TriggerSamplingDepth=strArr[1].toULongLong();
                 }
             }while(!setStream.atEnd());
+            //读取测量功能
             {
                 QFile readFile(path+"/measure.ini");
                 if(readFile.exists()){
                     if(!readFile.open(QIODevice::ReadOnly | QIODevice::Text))
                         throw QObject::tr("读取测量配置文件失败。");
                     QTextStream readStream(&readFile);
-                    readStream.setCodec(QTextCodec::codecForName("GBK"));
+                    readStream.setCodec(QTextCodec::codecForName("UTF-8"));
                     do{
                         QStringList strArr=readStream.readLine().split(",");
                         if(strArr.length()==6){
@@ -945,13 +999,14 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
                     readFile.close();
                 }
             }
+            //读取游标功能
             {
                 QFile readFile(path+"/vernier.ini");
                 if(readFile.exists()){
                     if(!readFile.open(QIODevice::ReadOnly | QIODevice::Text))
                         throw QObject::tr("读取测量配置文件失败。");
                     QTextStream readStream(&readFile);
-                    readStream.setCodec(QTextCodec::codecForName("GBK"));
+                    readStream.setCodec(QTextCodec::codecForName("UTF-8"));
                     bool isFirst=true;
                     do{
                         QStringList strArr=readStream.readLine().split(",");
@@ -975,38 +1030,74 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
                     readFile.close();
                 }
             }
+            //读取通道数据
             qreal channelSchedule=99/segment->GetChannelNum();
             for(qint32 i=0;i<segment->GetChannelNum();i++){
                 QDir savePath(path+"/"+QString::number(i));
                 if(!savePath.exists())
                 {
-                    errorStr.append(QObject::tr("缺失通道%1数据目录，已经跳过。\n").arg(QString::number(i)));
+                    throw QObject::tr("缺失通道%1数据目录，已经跳过。\n").arg(QString::number(i));
                     continue;
                 }
                 QVector<Segment::_Node>* dataList=segment->GetChannelDataList(i);
                 QFile channelSetFile(path+"/"+QString::number(i)+"/"+"channel.ini");
                 if(!channelSetFile.open(QIODevice::ReadOnly | QIODevice::Text))
                 {
-                    errorStr.append(QObject::tr("读取通道%1配置文件失败，已经跳过。\n").arg(QString::number(i)));
+                    throw QObject::tr("读取通道%1配置文件失败，已经跳过。\n").arg(QString::number(i));
                     continue;
                 }
                 QTextStream channelSetStream(&channelSetFile);
-                channelSetStream.setCodec(QTextCodec::codecForName("GBK"));
+                channelSetStream.setCodec(QTextCodec::codecForName("UTF-8"));
                 {
-                    
+                    //读取通道名
                     (*channelsNames)[i]=channelSetStream.readLine();
-                    
+                    //读取数据偏移
                     segment->SetStartOffsetSampling(i, channelSetStream.readLine().toULongLong());
-                    
+                    //读取最大长度
                     segment->SetMaxSample(channelSetStream.readLine().toULongLong(), i, false);
                 }
-                qreal channelSchedule2=channelSchedule/dataList->count();
                 {
+                    //遍历数据文件
+                    QDir tmp(path+"/"+QString::number(i)+"/");
+                    QStringList filters;
+                    filters << "*.bin";
+                    tmp.setNameFilters(filters);
+                    tmp.setFilter(QDir::Files); //设置过滤器
+                    QFileInfoList fileInfoList=tmp.entryInfoList();
+                    qreal channelSchedule2=channelSchedule/fileInfoList.count();
+                    for(int ii=0;ii<fileInfoList.count();ii++){
+                        QFile file(fileInfoList[ii].filePath());
+                        if(!isRun())
+                            break;
+                        if(!file.open(QIODevice::ReadOnly))
+                            throw QObject::tr("读取原始文件失败。");
+                        QDataStream in(&file);
+                        //判断是否没有申请内存
+                        QStringList list= fileInfoList[ii].fileName().replace(".bin","").split("-");
+                        if(list.size()!=2)
+                            continue;
+                        int iii=list[0].toInt(), j=list[1].toInt();
+                        if ((*dataList)[iii].lbp[j] == NULL)
+                        {
+                            (*dataList)[iii].lbp[j] = malloc_(segment->m_BLOCK_MAX_SIZE);
+                            if ((*dataList)[iii].lbp[j] == NULL)
+                                throw QObject::tr("申请内存失败，无法写入数据。");
+                            memset((*dataList)[iii].lbp[j], 0, segment->m_BLOCK_MAX_SIZE);
+                            in.readRawData((char *)(*dataList)[iii].lbp[j], qMin(file.size(), (qint64)segment->m_BLOCK_MAX_SIZE));
+                            segment->isData[i]=true;
+                        }
+                        file.close();
+                        emit SendDeviceRecvSchedule(qMin(i*channelSchedule+ii*channelSchedule2,99.),5,1);
+                    }
+
+                    //读取tog和value
                     qint32 ii=0;
+                    bool isCheckBlockCompress;
                     do{
                         QString str=channelSetStream.readLine();
                         if(str.contains(","))
                         {
+                            isCheckBlockCompress=false;
                             QStringList ls=str.split(",");
                             if(ls.count()==2)
                             {
@@ -1014,33 +1105,13 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
                                 (*dataList)[ii].value=ls[1].toULongLong();
                                 if(dataList->at(ii).tog)
                                     segment->isData[i]=true;
+                                if((*dataList)[ii].tog!=0)
+                                    isCheckBlockCompress=true;
                             }
-                            for(quint32 j=0;j<segment->m_NODE_DATA_SIZE;j++){
-                                QFile file(path+"/"+QString::number(i)+"/"+QString::number(ii)+"-"+QString::number(j)+".bin");
-                                if(file.exists())
-                                {
-                                    if(!isRun())
-                                        break;
-                                    if(!file.open(QIODevice::ReadOnly))
-                                        throw QObject::tr("读取原始文件失败。");
-                                    QDataStream in(&file);
-                                    
-                                    if ((*dataList)[ii].lbp[j] == NULL)
-                                    {
-                                        (*dataList)[ii].lbp[j] = malloc(segment->m_BLOCK_MAX_SIZE);
-                                        if ((*dataList)[ii].lbp[j] == NULL)
-                                            throw QObject::tr("申请内存失败，无法写入数据。");
-                                        memset((*dataList)[ii].lbp[j], 0, segment->m_BLOCK_MAX_SIZE);
-                                        in.readRawData((char *)(*dataList)[ii].lbp[j], qMin(file.size(), (qint64)segment->m_BLOCK_MAX_SIZE));
-                                        segment->isData[i]=true;
-                                    }
-                                    file.close();
-                                }else if((ls[0].toULongLong()&1<<j)==0)
-                                    break;
-                                segment->CheckBlockCompress(i,ii,j);
-                            }
+                            for(quint32 j=0;j<segment->m_NODE_DATA_SIZE;j++)
+                                if(isCheckBlockCompress || (*dataList)[ii].lbp[j] != NULL)
+                                    segment->CheckBlockCompress(i,ii,j);
                             ii++;
-                            emit SendDeviceRecvSchedule(qMin(i*channelSchedule+ii*channelSchedule2,99.),5,1);
                         }
                     }while(!channelSetStream.atEnd() && isRun());
                 }
@@ -1048,6 +1119,7 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
                 if(!isRun())
                     break;
             }
+            //判断最大显示位置
             quint64 maxSample=~0ull;
             for(qint32 i=0;i<segment->GetChannelNum();i++){
                 quint64 temp=segment->GetMaxSample(i);
@@ -1067,24 +1139,7 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
             for(qint32 i=0;i<segment->m_isFirst.count();i++)
                 segment->m_isFirst[i]=true;
             emit SendDeviceRecvSchedule(99,5,1);
-            
-            if(!decodes.isEmpty()){
-                if(GetTickCount_()-t1<300)
-                    QThread::msleep(300);
-                for(qint32 i=0;i<decodes.count();i++){
-                    if(!decodes[i].isEmpty()){
-                        QFile readFile(path+"/"+decodes[i]);
-                        if(readFile.exists()){
-                            if(!readFile.open(QIODevice::ReadOnly | QIODevice::Text))
-                                throw QObject::tr("读取协议文件失败。");
-                            QTextStream readStream(&readFile);
-                            readStream.setCodec(QTextCodec::codecForName("GBK"));
-                            emit appendDecode(readStream.readAll(),false);
-                            readFile.close();
-                        }
-                    }
-                }
-            }
+
         }else
             throw QObject::tr("通道配置文件缺失。");
 
@@ -1105,10 +1160,149 @@ void ThreadWork::LoadSourceFileThreadPara(QString filePath, Segment *segment, Se
     if(!glitchString.isEmpty())
         emit sendGlitchString(glitchString);
     else{
-        emit appendDecode("",true);
+        if(isSendDecode)
+            emit appendDecode("",true);
         emit sendGlitchString("");
     }
+    shared->decrement(LOAD_FILE);
+}
 
+void ThreadWork::SaveBinFileThreadPara(QString filePath, Segment *segment, qint32 type, QString channels)
+{
+    SharedMemoryHelper* shared=&DataService::getInstance()->m_shared;
+    shared->increase(SAVE_FILE);
+    LogHelp::write(QString("    导出原始文件线程启动"));
+    setRun(1);
+    segment->appendCite();
+    bool isError=false;
+    QString path=creanTimestampDir(DataService::getInstance()->m_tempDir+"/temp/save/",true);
+    QFile* file=new QFile(path);
+    QList<quint8*> buff;
+    buff.append(new quint8[segment->m_BLOCK_MAX_SIZE]);
+    buff.append(new quint8[segment->m_BLOCK_MAX_SIZE]);
+    memset(buff[0], 0, segment->m_BLOCK_MAX_SIZE);
+    memset(buff[1], 0xff, segment->m_BLOCK_MAX_SIZE);
+    try{
+        emit SendDeviceRecvSchedule(0,4,1);
+        {
+            if(!file->open(QIODevice::WriteOnly | QIODevice::Truncate))
+            {
+                isError=true;
+                m_sessionError->setError_msg(QObject::tr("创建文件失败。"));
+                goto end;
+            }
+            QDataStream out(file);
+            QList<quint8> channelList;
+            QList<QString> strs=channels.split(",");
+            for(auto &i : strs){
+                bool isOK=false;
+                channelList.append(i.toInt(&isOK));
+                if(!isOK || channelList[channelList.count()-1]>15){
+                    isError=true;
+                    m_sessionError->setError_msg(QObject::tr("参数异常。"));
+                    goto end;
+                }
+            }
+
+            qreal channelSchedule=99/channelList.count();
+            for(auto &i:channelList){
+                QVector<Segment::_Node>* dataList=segment->GetChannelDataList(i);
+                if(dataList!=nullptr){
+                    qreal channelSchedule2=channelSchedule/dataList->count();
+                    qint32 offset=segment->GetStartOffsetSampling(i)>>3;
+                    qint64 countSample=0,maxSample=segment->GetMaxSample(i);
+                    bool isEnd=false;
+                    for(qint32 ii=0;ii<dataList->count();ii++){
+                        for(quint32 j=0;j<segment->m_NODE_DATA_SIZE;j++){
+                            quint8* data=nullptr;
+                            qint32 len=0;
+                            if(dataList->at(ii).lbp[j]){
+                                data=(quint8*)dataList->at(ii).lbp[j];
+                                len=segment->m_BLOCK_MAX_SIZE;
+                            }else{
+                                data=buff[(dataList->at(ii).value&1<<j)?1:0];
+                                len=segment->m_BLOCK_MAX_SIZE;
+                            }
+
+                            if(offset>0){
+                                if(offset>len){
+                                    offset-=len;
+                                    len=0;
+                                }else{
+                                    data+=offset;
+                                    len-=offset;
+                                    offset=0;
+                                }
+                            }
+
+                            if(countSample+(len<<3)>maxSample){
+                                len=(maxSample-countSample)>>3;
+                                if(((maxSample-countSample)&7)>0)
+                                    len++;
+                                isEnd=true;
+                            }
+
+                            if(len>0){
+                                out.writeRawData((const char*)data, len);
+                                countSample+=len<<3;
+                            }
+
+                            if(isEnd || !isRun())
+                                break;
+                        }
+                        if(isEnd || !isRun())
+                            break;
+                        emit SendDeviceRecvSchedule(qMin(i*channelSchedule+ii*channelSchedule2,99.),4,1);
+                    }
+                }
+                if(!isRun())
+                    break;
+            }
+            if(!isRun())
+            {
+                m_sessionError->setError_msg(QObject::tr("导出线程已停止。"));
+                isError=true;
+            }
+        }
+    } catch (exception &e) {
+        m_sessionError->setError_msg(QObject::tr("保存异常，错误信息:%1").arg(e.what()));
+        isError=true;
+    } catch (...) {
+        m_sessionError->setError_msg(QObject::tr("保存失败，文件数据可能有误。"));
+        isError=true;
+    }
+end:
+    try{
+        file->flush();
+        file->close();
+        if(isError)
+            file->remove();
+        else{
+            {
+                isError=false;
+                QFile fileTarget(filePath);
+                if(fileTarget.exists()){
+                    if(!fileTarget.remove()){
+                        isError=true;
+                        m_sessionError->setError_msg(QObject::tr("文件被占用，无法删除文件。"));
+                    }
+                }
+            }
+            if(!isError){
+                if(!file->rename(filePath))
+                    m_sessionError->setError_msg(QObject::tr("文件被占用，无法覆盖文件。"));
+            }
+        }
+        delete file;
+    } catch(...){
+    }
+    for(auto i : buff)
+        delete[] i;
+    LogHelp::write(QString("    导出原始文件线程退出"));
+    segment->lessenCite();
+    emit SendDeviceRecvSchedule(100,4,isRun()&&!isError?1:0);
+    setRun(0);
+    shared->decrement(SAVE_FILE);
 }
 
 void ThreadWork::GlitchRemovalThreadPara(Segment *segment)
@@ -1186,7 +1380,7 @@ void ThreadWork::GlitchRemovalThreadPara(Segment *segment)
             segment->m_isFirst[i]=true;
     } catch (exception &e) {
         setRun(2);
-        m_sessionError->setError_msg(QObject::tr("设置失败，错误信息:1%").arg(e.what()));
+        m_sessionError->setError_msg(QObject::tr("设置失败，错误信息:%1").arg(e.what()));
     } catch (...) {
         setRun(2);
         m_sessionError->setError_msg(QObject::tr("设置失败，视图数据可能有误。"));
@@ -1198,25 +1392,14 @@ end:
     setRun(0);
 }
 
-void ThreadWork::SaveDecodeTableThreadPara(QString filePath, qint32 multiply, QVector<DecodeRowData> *data,QVector<QMap<QString,QJsonObject>>* rowType, QVector<bool>* saveList)
+void ThreadWork::SaveDecodeTableThreadPara(QString filePath, qint32 multiply, QList<DecodeRowData> *data,QList<QMap<QString,QJsonObject>>* rowType, QVector<bool>* saveList)
 {
+    SharedMemoryHelper* shared=&DataService::getInstance()->m_shared;
+    shared->increase(SAVE_FILE);
     LogHelp::write(QString("    保存协议表格线程启动"));
     setRun(1);
     bool isError=false;
-    QString path=QDir::tempPath()+"/ATK-Logic/temp/save/";
-    {
-        QDir savePath(path);
-        savePath.mkpath(path);
-
-        QString temp;
-        bool isExists;
-        do{
-            temp=QString::number(QDateTime::currentSecsSinceEpoch());
-            QDir savePath(path+temp);
-            isExists=savePath.exists();
-        }while(isExists);
-        path+=temp+".csv";
-    }
+    QString path=creanTimestampDir(DataService::getInstance()->m_tempDir+"/temp/save/",true);
     QFile* file=new QFile(path);
     try{
         emit SendDeviceRecvSchedule(0,4,1);
@@ -1343,6 +1526,7 @@ end:
     emit SendDeviceRecvSchedule(100,4,isRun()?1:0);
     LogHelp::write(QString("    保存协议表格线程结束"));
     setRun(0);
+    shared->decrement(SAVE_FILE);
 }
 
 void ThreadWork::calcMeasureData(qint32 measureID, qint32 channelID, QVector<MeasureData>* measure, Segment* segment)
@@ -1418,11 +1602,11 @@ void ThreadWork::calcFRing(qint64 start, qint64 end, MeasureData *data, qint32 c
             llBlockEnd=ullChunkEnd;
         qint64 len=llBlockEnd-llBlockStart;
         if(len){
-            
+            //计算最小最大频率
             if(isFirst)
                 isFirst=false;
             else{
-                
+                //当前循环的长度下个循环再计算，这样就可以不计算最后一个长度
                 if(llFreqRecode==0)
                     llFreqRecode=len;
                 else if(llFreqRecode2==0)
@@ -1490,5 +1674,40 @@ bool ThreadWork::isRun()
     qint8 tmp=m_run;
     m_lock.unlock();
     return tmp==1;
+}
+
+QString ThreadWork::creanTimestampDir(QString path, bool isFile)
+{
+    SharedMemoryHelper* shared=&DataService::getInstance()->m_shared;
+    QDir savePath(path);
+    savePath.mkpath(path);
+    QString temp;
+    while(!shared->setFileDirCrean(true)){
+        QThread::msleep(10);
+        QApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    if(path.right(1)!="/")
+        path+="/";
+    do{
+        temp=QString::number(QDateTime::currentSecsSinceEpoch());
+        if(isFile){
+            QFile file(path+temp);
+            if(!file.exists()){
+                file.open(QIODevice::WriteOnly | QIODevice::Truncate);
+                file.close();
+                break;
+            }
+        }else{
+            QDir savePath2(path+temp);
+            if(!savePath2.exists()){
+                savePath2.mkdir(path+temp);
+                break;
+            }
+        }
+        QThread::msleep(10);
+    }while(true);
+    shared->setFileDirCrean(false);
+    path+=temp;
+    return path;
 }
 

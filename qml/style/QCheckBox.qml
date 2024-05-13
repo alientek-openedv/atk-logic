@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -25,11 +9,20 @@ Item {
     property color backgroundColor: Config.background2Color
     property alias fontPixelSize: showText.font.pixelSize
     property alias textVerticalCenterOffset: showText.anchors.verticalCenterOffset
+    property alias containsMouse: mouseAreaRoot.containsMouse
     property bool autoCheck: true
     signal clicked_();
 
     implicitHeight: 14
-    implicitWidth: 60
+    implicitWidth: checkButton.width+showText.implicitWidth+5
+
+    MouseArea{
+        id: mouseAreaRoot
+        anchors.fill: parent
+        hoverEnabled: true
+        enabled: !disable
+    }
+
     Button {
         id: checkButton
         clip: true
@@ -39,11 +32,14 @@ Item {
         focusPolicy: Qt.NoFocus
         anchors{
             top: parent.top
-            topMargin: 4
+            topMargin: 1
         }
         Image{
             visible: isCheck
+            width: 13
+            height: 10
             source: "../../resource/image/check.png"
+            fillMode: Image.PreserveAspectFit
             anchors{
                 bottom: parent.bottom
                 horizontalCenter: parent.horizontalCenter

@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "search_table_model.h"
+﻿#include "search_table_model.h"
 
 SearchTableModel::SearchTableModel(QObject *parent)
     : QAbstractTableModel(parent)
@@ -91,6 +75,7 @@ qint32 SearchTableModel::refreshBuffer(qint32 y)
     qint32 offsetCurrent=middle-current;
     qint32 recode=m_set.bufferFirst;
     if(current<=topLine){
+        //缓冲区往顶部偏移
         if(m_set.bufferFirst!=0){
             m_set.bufferFirst-=offsetCurrent;
             if(m_set.bufferFirst<0){
@@ -101,6 +86,7 @@ qint32 SearchTableModel::refreshBuffer(qint32 y)
             refreshBuffer();
         }
     }else if(current>=bottomLine){
+        //缓冲区往底部偏移
         if(m_set.bufferFirst+m_set.bufferSize<m_sortCount){
             m_set.bufferFirst-=offsetCurrent;
             offset=offsetCurrent*m_set.lineHeight;
@@ -183,9 +169,16 @@ bool SearchTableModel::search(const QString &text, qint64 start, qint64 end)
             setCount(0);
             m_sortDataMutex.lock();
             m_searchText="";
-            if(m_state!=0)
+            if(m_state!=0){
                 m_state=3;
-            m_sortDataMutex.unlock();
+                m_sortDataMutex.unlock();
+            }else{
+                m_sortData.clear();
+                m_sortCount=0;
+                m_set.bufferFirst=0;
+                m_sortDataMutex.unlock();
+                refreshBuffer();
+            }
             return true;
         }else if(m_state!=3 && m_segment){
             bool isChanged=false;
@@ -306,11 +299,13 @@ void SearchTableModel::searchData()
         end=m_end;
         search=reverseString(m_searchText);
         m_sortData.clear();
-        QVector<qint8> edgeList=getSearchEdge(search);
-        QVector<qint8> levelList=getSearchLevel(search);
-        QVector<bool> channelLevel;
-        QVector<DataEnd> positionList;
+        //初始化每次循环搜索的变量
+        QVector<qint8> edgeList=getSearchEdge(search);//边沿搜索通道索引
+        QVector<qint8> levelList=getSearchLevel(search);//电平搜索通道索引
+        QVector<bool> channelLevel;//当前位置电平
+        QVector<DataEnd> positionList;//通道边沿结果集
         bool isReset=true;
+        //判断搜索通道是否拥有数据
         if(!isData(search))
         {
             m_sortDataMutex.unlock();
@@ -324,11 +319,16 @@ void SearchTableModel::searchData()
             m_sortDataMutex.unlock();
             break;
         }
+
+        //是否边沿搜索
         qint32 completeCount=0;
         if(edgeList.isEmpty()){
+            //电平搜索
+            //初始化索引
             for(qint32 i=0;i<levelList.count();i++)
                 channelLevel.append(m_segment->GetSample(start,levelList[i]));
             while(state==1 && start<=end){
+                //搜索边沿结果
                 if(isReset){
                     isReset=false;
                     positionList.clear();
@@ -338,16 +338,19 @@ void SearchTableModel::searchData()
                         DataEnd temp=m_segment->GetDataEnd(start,levelList[i],false);
                         if(temp.position<=0 || temp.position>=maxSample || temp.position>=end)
                         {
-                            
+                            //到底了
                             completeCount++;
                             if(temp.position<=0)
                                 temp.position=0;
                             else
                                 temp.position=maxSample;
+                            if(temp.position>=end)
+                                temp.position=end;
                         }
                         positionList.append(temp);
                     }
                 }
+                //取得最小搜索结果
                 DataEnd minPosition=positionList[0];
                 QList<qint32> minPositionIndex;
                 minPositionIndex.append(0);
@@ -360,23 +363,27 @@ void SearchTableModel::searchData()
                     }else if(positionList[i].position==minPosition.position)
                         minPositionIndex.append(i);
                 }
+
+                //判断电平是否符合搜索条件
                 for(qint32 i=0;i<levelList.size();i++){
                     qint32 index=levelList[i];
                     switch(search[index].toUpper().toLatin1()){
-                    case '0':
+                    case '0'://低电平
                         if(m_segment->GetSample(start,index))
                             appendState=false;
                         break;
-                    case '1':
+                    case '1'://高电平
                         if(!m_segment->GetSample(start,index))
                             appendState=false;
                         break;
                     }
                 }
+                //判断是否全部搜索通道到底
                 if(completeCount==levelList.count()&&m_state==1)
                     m_state=0;
                 m_sortDataMutex.lock();
                 if(appendState)
+                    //符合条件，添加显示
                     m_sortData.append(SearchData(start*multiply, minPosition.position*multiply-1));
                 {
                     completeCount=0;
@@ -384,11 +391,14 @@ void SearchTableModel::searchData()
                         DataEnd temp=m_segment->GetDataEnd(minPosition.position,levelList[minPositionIndex[i]],false);
                         if(temp.position<=0 || temp.position>=maxSample || temp.position>=end)
                         {
+                            //到底了
                             completeCount++;
                             if(temp.position<=0)
                                 temp.position=0;
                             else
                                 temp.position=maxSample;
+                            if(temp.position>=end)
+                                temp.position=end;
                         }
                         positionList[minPositionIndex[i]]=temp;
                     }
@@ -407,7 +417,9 @@ void SearchTableModel::searchData()
                 }
             }
         }else{
+            //边沿搜索
             while(state==1 && start<=end){
+                //搜索边沿结果
                 if(isReset){
                     isReset=false;
                     positionList.clear();
@@ -417,19 +429,24 @@ void SearchTableModel::searchData()
                         DataEnd temp=m_segment->GetDataEnd(start,edgeList[i],false);
                         if(temp.position<=0 || temp.position>=maxSample || temp.position>=end)
                         {
+                            //到底了
                             completeCount++;
                             if(temp.position<=0)
                                 temp.position=0;
                             else
                                 temp.position=maxSample;
+                            if(temp.position>=end)
+                                temp.position=end;
                         }
                         positionList.append(temp);
                     }
                 }
+                //判断所有边沿位置是否一样，否则位置跳到最大搜索结果处继续搜索
                 DataEnd maxPosition=positionList[0];
                 QList<qint32> maxPositionIndex;
                 maxPositionIndex.append(0);
                 bool appendState=true;
+                //判断所有边沿位置
                 for(qint32 i=1;i<positionList.count();i++){
                     if(maxPosition.position!=positionList[i].position)
                         appendState=false;
@@ -441,20 +458,21 @@ void SearchTableModel::searchData()
                         maxPositionIndex.append(i);
                 }
                 if(appendState){
+                    //判断边沿是否符合搜索条件
                     for(qint32 i=0;i<edgeList.count();i++){
                         qint32 index=edgeList[i];
                         bool first=m_segment->GetSample(positionList[i].position-1,index);
                         bool second=m_segment->GetSample(positionList[i].position,index);
                         switch(search[index].toUpper().toLatin1()){
-                        case 'R':
+                        case 'R'://上升沿
                             if(!(!first && second))
                                 appendState=false;
                             break;
-                        case 'F':
+                        case 'F'://下降沿
                             if(!(first && !second))
                                 appendState=false;
                             break;
-                        case 'C':
+                        case 'C'://所有沿
                             if(first == second)
                                 appendState=false;
                             break;
@@ -464,14 +482,15 @@ void SearchTableModel::searchData()
                     }
                 }
                 if(appendState){
+                    //判断电平是否符合搜索条件
                     for(qint32 i=0;i<levelList.size();i++){
                         qint32 index=levelList[i];
                         switch(search[index].toUpper().toLatin1()){
-                        case '0':
+                        case '0'://低电平
                             if(m_segment->GetSample(maxPosition.position,index))
                                 appendState=false;
                             break;
-                        case '1':
+                        case '1'://高电平
                             if(!m_segment->GetSample(maxPosition.position,index))
                                 appendState=false;
                             break;
@@ -479,11 +498,12 @@ void SearchTableModel::searchData()
                     }
                 }
                 start=maxPosition.position;
-                
+                //判断是否全部搜索通道到底
                 if(completeCount==edgeList.count()&&m_state==1)
                     m_state=0;
                 m_sortDataMutex.lock();
                 if(appendState){
+                    //符合条件，添加显示
                     qint64 temp=start*multiply;
                     m_sortData.append(SearchData(temp, temp));
                 }
@@ -493,11 +513,14 @@ void SearchTableModel::searchData()
                         DataEnd temp=m_segment->GetDataEnd(start,edgeList[maxPositionIndex[i]],false);
                         if(temp.position<=0 || temp.position>=maxSample || temp.position>=end)
                         {
+                            //到底了
                             completeCount++;
                             if(temp.position<=0)
                                 temp.position=0;
                             else
                                 temp.position=maxSample;
+                            if(temp.position>=end)
+                                temp.position=end;
                         }
                         positionList[maxPositionIndex[i]]=temp;
                     }
@@ -508,6 +531,7 @@ void SearchTableModel::searchData()
                     emit refreshCountTimer(true);
             }
         }
+        //更新搜索参数重置搜索
         if(state==2){
             m_sortDataMutex.lock();
             m_state=1;
@@ -518,6 +542,7 @@ void SearchTableModel::searchData()
     }
     m_session->m_segment->lessenCite();
     emit refreshCountTimer(false);
+    //停止搜索
     m_sortDataMutex.lock();
     if(state==3)
         m_sortData.clear();

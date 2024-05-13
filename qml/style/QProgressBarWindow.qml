@@ -1,25 +1,9 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
 Rectangle{
-    property int type: 0
+    property int type: 0//0-3=采集状态,4=保存文件,5=加载文件,6=重新计算毛刺过滤,7=等待停止解码,8解压文件中,9压缩文件中
     property color primaryColor: "white"
     property color secondaryColor: "#00af54"
     property real minimumValue: 0
@@ -41,7 +25,7 @@ Rectangle{
 
         property bool containsMouse_: false
         property var showText: [qsTr("预采集"),qsTr("等待触发"),qsTr("已触发，等待采集！"),qsTr("已采集，等待传输！"),
-            qsTr("保存文件中"),qsTr("加载文件中"),qsTr("计算数据中"),qsTr("等待停止解码")]
+            qsTr("保存文件中"),qsTr("加载文件中"),qsTr("计算数据中"),qsTr("等待停止解码"),qsTr("解压文件中"),qsTr("压缩文件中")]
         property var closeText: qsTr("停止")
 
         property real currentValueShow
@@ -95,6 +79,10 @@ Rectangle{
 
         if(currentValue===maximumValue)
         {
+//            currentValueAnimation.stop();
+//            currentValueAnimation.duration=10;
+//            txtProgress.text=Math.trunc(currentValue).toString();
+//            set.isFinished=true;
             rootRectangle.visible=false;
             return;
         }
@@ -132,6 +120,9 @@ Rectangle{
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = primaryColor;
                 ctx.lineWidth = 6;
+
+                // First, thinner arc
+                // From angle to 2*PI
                 ctx.beginPath();
                 ctx.strokeStyle = primaryColor;
                 ctx.arc(set.centerWidth,
@@ -140,6 +131,9 @@ Rectangle{
                         set.angleOffset + set.angle,
                         set.angleOffset + 2*Math.PI);
                 ctx.stroke();
+
+                // Second, thicker arc
+                // From 0 to angle
                 ctx.beginPath();
                 ctx.strokeStyle = secondaryColor;
                 ctx.arc(set.centerWidth,
@@ -198,7 +192,7 @@ Rectangle{
             id: stopButton
             width: 100
             height: 30
-            visible: type!=6&&type!=7
+            visible: type!=6&&type!=7&&type!=8&&type!=9
             text: set.closeText
             textFontSize: 16
             anchors{

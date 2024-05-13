@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef SESSION_CONFIG_H
+﻿#ifndef SESSION_CONFIG_H
 #define SESSION_CONFIG_H
 
 #include "qlist.h"
@@ -32,15 +16,15 @@ private:
     void appendConfig(QString showUint);
 
 public:
-    QList<SessionShowConfig> m_showList;
-    SessionShowConfig m_showConfig;
-    quint32 m_selectShowIndex;
-    qint64 m_maxUnit=1000000000;
-    qint64 m_showStartUnit=0;
-    qint32 m_width=0;
-    bool m_isCustom=true;
-    bool m_isData=false;
-    bool m_isShowIndex=false;
+    QList<SessionShowConfig> m_showList;//显示列表
+    SessionShowConfig m_showConfig;//显示属性
+    quint32 m_selectShowIndex;//当前显示索引
+    qint64 m_maxUnit=1000000000;//最多拥有多少个ns，也就是显示的最大范围
+    qint64 m_showStartUnit=0;//界面显示起始位置(ns)
+    qint32 m_width=0;//绘制宽度
+    bool m_isCustom=true;//是否最大显示
+    bool m_isData=false;//是否有数据
+    bool m_isShowIndex=false;//是否显示序号
 };
 
 bool inline operator!=(const SessionConfig &st, const SessionConfig &st2)
@@ -56,4 +40,4 @@ bool inline operator!=(const SessionConfig &st, const SessionConfig &st2)
         ret=true;
     return ret;
 }
-#endif 
+#endif // SESSION_CONFIG_H

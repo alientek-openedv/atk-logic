@@ -1,26 +1,10 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "analysis.h"
+﻿#include "analysis.h"
 
 int analysis_check_data_header(quint8* pData){
-    if (*pData == 0x0a) 
+    if (*pData == 0x0a) //包头检测
     {
         char c = *(pData + 1);
-        if (c > 0 && c < 7)
+        if (c > 0 && c < 7)//判定指令范围
             return c;
     }
     return -1;
@@ -30,7 +14,7 @@ bool analysis_check_data_bottom(quint8* pData,qint64 llDataLength) {
 
     quint16 len=*((quint16*)(pData + 2)) + 4;
     if(len<llDataLength){
-        if (*(pData + len) == 0x00 && *(pData + len + 1) == 0x0b)
+        if (*(pData + len) == 0x00 && *(pData + len + 1) == 0x0b)//包尾检测
             return true;
     }
     return false;
@@ -40,6 +24,7 @@ bool analysis_get_data(quint8* pData, Data_* data) {
     pData += 2;
     quint16 len = *((quint16*)pData);
     pData += 2;
+    //判定获取的长度不得超出数据长度
     if(len<data->len&&len>0){
         data->buf = pData;
         data->len = len;
@@ -55,17 +40,22 @@ Analysis::Analysis(quint8 *pData, qint64 ullLen)
 AnalysisData Analysis::getNextData()
 {
     AnalysisData ret;
+    //循环指令所有数据
     while (m_index < m_len) {
+        //判断是否协议头并且获取指令代码
         ret.order = analysis_check_data_header(m_pData);
         if(ret.order!=-1)
         {
             if(analysis_check_data_bottom(m_pData, m_len-m_index)){
+                //获取数据
                 Data_* data2 = new Data_();
                 data2->len = m_len-m_index-1;
                 if (analysis_get_data(m_pData, data2))
                 {
                     ret.pData=data2->buf;
                     ret.ullLen=data2->len;
+
+                    //跳过已经获取的数据
                     m_index += ret.ullLen + 5;
                     m_pData += ret.ullLen + 5;
                     m_plastData=m_pData+1;

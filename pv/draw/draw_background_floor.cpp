@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "draw_background_floor.h"
+﻿#include "draw_background_floor.h"
 
 DrawBackgroundFloor::DrawBackgroundFloor(QQuickItem *parent) : QQuickPaintedItem{parent}
 {
@@ -37,6 +21,10 @@ void DrawBackgroundFloor::mousePressEvent(QMouseEvent* event)
     if(m_isExit)
         return;
     setKeepMouseGrab(true);
+    if(m_crossChannelMeasureState!=0){
+        emit crossChannelMeasureState(true);
+        return;
+    }
     m_mousePoint=event->pos();
     m_oldPoint=event->globalPos();
     m_zoomPoint=m_mousePoint;
@@ -102,21 +90,25 @@ void DrawBackgroundFloor::mouseReleaseEvent(QMouseEvent* event)
             update();
         }
     }else if(m_currentButton==Qt::RightButton){
-        if(qAbs(m_zoomPoint.x()-m_zoomPointEnd.x())>2){
-            qint64 start=m_zoomPoint.x()*m_session->m_config->m_showConfig.m_pixelUnit+m_session->m_config->m_showStartUnit;
-            qint64 end=qMax(qMin(m_zoomPointEnd.x(), m_width),0)*m_session->m_config->m_showConfig.m_pixelUnit+m_session->m_config->m_showStartUnit;
-            if(start>end)
-            {
-                start^=end;
-                end^=start;
-                start^=end;
+        if(m_selectVernierIndex!=-1)
+            vernierCancelMove();
+        else{
+            if(qAbs(m_zoomPoint.x()-m_zoomPointEnd.x())>2){
+                qint64 start=m_zoomPoint.x()*m_session->m_config->m_showConfig.m_pixelUnit+m_session->m_config->m_showStartUnit;
+                qint64 end=qMax(qMin(m_zoomPointEnd.x(), m_width),0)*m_session->m_config->m_showConfig.m_pixelUnit+m_session->m_config->m_showStartUnit;
+                if(start>end)
+                {
+                    start^=end;
+                    end^=start;
+                    start^=end;
+                }
+                start=qMax(start,0ll);
+                end=qMin(end,m_session->m_config->m_maxUnit);
+                emit showViewScope(start,end);
             }
-            start=qMax(start,0ll);
-            end=qMin(end,m_session->m_config->m_maxUnit);
-            emit showViewScope(start,end);
+            m_currentButton=Qt::LeftButton;
+            emit mouseZoom(false,0,0,0,0);
         }
-        m_currentButton=Qt::LeftButton;
-        emit mouseZoom(false,0,0,0,0);
     }
 }
 
@@ -136,12 +128,16 @@ void DrawBackgroundFloor::hoverMoveEvent(QHoverEvent* event)
     m_mousePoint=event->pos();
     if(m_vernierCreateModel)
         vernierMove(m_mousePoint.x());
+    else if(m_crossChannelMeasureState)
+        emit sendCrossChannelMeasurePosition(2, m_mousePoint.x(), m_mousePoint.y(), m_mousePoint.y(), getAdsorbPosition(m_mousePoint.x()), false);
     else
         vernierMethod();
 }
 
 void DrawBackgroundFloor::vernierMethod(bool isClick)
 {
+    if(!isEnabled())
+        return;
     qint64 start=m_session->m_config->m_showStartUnit;
     double pixelUnit=m_session->m_config->m_showConfig.m_pixelUnit;
     QVector<VernierData>* vernierData=&m_session->m_vernier;
@@ -159,6 +155,7 @@ void DrawBackgroundFloor::vernierMethod(bool isClick)
         {
             isShow=true;
             m_selectVernierIndex=i;
+            m_selectVernierPosition=data.position;
         }
     }
     setShowCursor(isShow);
@@ -219,6 +216,23 @@ void DrawBackgroundFloor::init(QString sessionID)
     update();
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptHoverEvents(true);
+}
+
+void DrawBackgroundFloor::vernierCancelMove()
+{
+    if(m_selectVernierIndex!=-1){
+        qint32 tmp=m_selectVernierIndex;
+        m_selectVernierIndex=-1;
+        m_vernierCreateModel=false;
+        m_session->m_vernier[tmp].position=m_selectVernierPosition;
+        emit vernierDataChanged(m_session->m_vernier[tmp].id);
+        emit m_session->drawUpdate();
+    }
+}
+
+void DrawBackgroundFloor::setCrossChannelMeasureState(bool isStop)
+{
+    m_crossChannelMeasureState=!isStop;
 }
 
 bool DrawBackgroundFloor::showCursor() const

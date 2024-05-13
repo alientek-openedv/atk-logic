@@ -1,26 +1,11 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
 Slider {
     property string postfixText: ""
     property int decimalDigits: 0
+    property int splice: 10
     property bool isShowText: true
     property alias handleX: handleItem.x
     property bool wheelChanged: Setting.componentWheelChanged
@@ -34,16 +19,16 @@ Slider {
     background: Item {
         anchors.fill: parent
         Rectangle {
-            width: parent.width-10
+            width: parent.width-handleRectangle.width*2
             height: 1
             anchors.centerIn: parent
             color: Config.iceBlue
             Repeater{
-                model: 11
+                model: splice + 1
                 Rectangle{
                     width: 1
                     height: 3
-                    x: (parent.width-handleRectangle.width)/(to-from)*index*((to-from)*0.1)+handleRectangle.width/2
+                    x: (parent.width-1)/(to-from)*index*((to-from)/splice)
                     y: -height
                     color: Config.iceBlue
                 }

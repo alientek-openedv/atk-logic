@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "session_controller.h"
+﻿#include "session_controller.h"
 
 SessionController::SessionController(QObject* parent) : QObject(parent){}
 
@@ -55,6 +39,9 @@ void SessionController::init()
     connect(m_session->m_workThread,&ThreadWork::timerDrawUpdate,this,&SessionController::timerDrawUpdate);
     connect(m_session->m_workThread,&ThreadWork::calcMeasureDataComplete,this,&SessionController::calcMeasureDataComplete);
     connect(m_session->m_workThread,&ThreadWork::sendGlitchString,this,&SessionController::sendGlitchString);
+    connect(m_session->m_workThread,&ThreadWork::sendZipDirSchedule,this,&SessionController::sendZipDirSchedule);
+    connect(m_session->m_workThread,&ThreadWork::sendUnZipDirSchedule,this,&SessionController::sendUnZipDirSchedule);
+    connect(m_session->m_workThread,&ThreadWork::decodeToPosition,this,&SessionController::onDecodeToPosition);
 
     connect(this,&SessionController::measureDataChanged,m_session,&Session::measureDataChanged);
     setIsInit(1);
@@ -97,6 +84,26 @@ void SessionController::onAppendDecode(QString json, bool end)
         startDecodeTmp();
     else
         m_decodeTmp.append(json);
+}
+
+void SessionController::onDecodeToPosition(qint64 position, qint64 maxSample_)
+{
+    m_session->m_isShowDecode=true;
+    QHash<QString,DecodeController*> list=m_session->getDecodeList();
+    for(auto &i : list){
+        if(position<0 && maxSample_<0){
+            i->stopDedoceAnalysis();
+        }else if(i->decodeToPosition(m_session->m_segment->GetMultiply(),position,maxSample_)){
+            connect(this, &SessionController::sendRestartDevice, i, &DecodeController::restart);
+            emit sendRestartDevice(m_session->m_segment,maxSample_,true);
+            disconnect(this,&SessionController::sendRestartDevice,nullptr,nullptr);
+        }
+    }
+}
+
+void SessionController::initFile()
+{
+    m_session->initFile();
 }
 
 void SessionController::resetBindingPort()
@@ -202,6 +209,7 @@ void SessionController::setFilePath(const QString &newFilePath)
 
 bool SessionController::start(QJsonObject json,qint32 type)
 {
+    m_progressBarShow=false;
     if(m_session==nullptr || m_sessionType!=1)
         return false;
     LogHelp::write(QString("启动采集"));
@@ -209,40 +217,57 @@ bool SessionController::start(QJsonObject json,qint32 type)
     QString log="采集参数: ";
     quint64 samplingDepth=0,triggerSamplingDepth=0;
     double second;
-    bool isBuffer=false,isRLE=false;
+    bool isBuffer=false,isRLE=false,isTrigger=false;
     uchar b=0;
+    //设置属性
     {
         QJsonObject settingJson=json["settingData"].toObject();
+        //RLE
         isRLE=settingJson["RLE"].toBool();
+        //运行模式
         isBuffer=settingJson["isBuffer"].toBool();
         log="RLE:"+QString::number(isRLE);
         log+=",Buffer:"+QString::number(isBuffer);
         if(isBuffer)
             b+=128;
+        //RLE
         if(isRLE)
             b+=64;
+        //时钟下降沿采样
+        //        if(settingJson["clockNegedge"].toBool())
+        //            b+=32;
+        //滤波器设置
+        //        if(settingJson["filterTargets"].toInt()==2||settingJson["filterTargets"].toInt()==3)
+        //            b+=16;
+        //        if(settingJson["filterTargets"].toInt()==1||settingJson["filterTargets"].toInt()==3)
+        //            b+=8;
         setArray.append(b);
+        //电压阈值
         b=0;
         log+=",阈值:"+QString::number(settingJson["thresholdLevel"].toDouble());
         if(settingJson["thresholdLevel"].toDouble()<0)
             b+=128;
         b+=qAbs(qRound(settingJson["thresholdLevel"].toDouble()*10));
         setArray.append(b);
+        //Hz
         setArray.append((uchar)settingJson["selectHzIndex"].toInt()+1);
+        //Buffer=采集深度(Sa) Sa=秒*Hz
         second=settingJson["setTime"].toDouble()/1000;
         log+=",hz:"+QString::number(settingJson["setHz"].toDouble());
         log+=",time:"+QString::number(settingJson["setTime"].toDouble())+"ms";
         samplingDepth=(quint64)settingJson["setHz"].toDouble()/1000*settingJson["setTime"].toDouble();
         log+=",采样深度:"+QString::number(samplingDepth);
         setArray.append(intToBytes(samplingDepth,5));
+        //触发位置
         triggerSamplingDepth=(quint64)(samplingDepth/100 * settingJson["triggerPosition"].toDouble());
         log+=",触发位置:"+QString::number(triggerSamplingDepth);
         setArray.append(intToBytes(triggerSamplingDepth,5));
         m_session->m_config->m_maxUnit=(qint64)settingJson["setTime"].toDouble()*1000L*1000L;
     }
     QVector<qint8> channelIDList;
-    
+    //通道设置
     if(type==0){
+        //简单触发模式
         log+=",立即采集:"+QString::number(json["isInstantly"].toBool());
         log+=",开启通道:";
         QJsonArray array=json["channelsSet"].toArray();
@@ -258,22 +283,27 @@ bool SessionController::start(QJsonObject json,qint32 type)
                     case RisingEdge:
                         log+="RisingEdge";
                         b+=(uchar)(ii%2==0?16:1);
+                        isTrigger=true;
                         break;
                     case HighLevel:
                         log+="HighLevel";
                         b+=(uchar)(ii%2==0?64:4);
+                        isTrigger=true;
                         break;
                     case FallingEdge:
                         log+="FallingEdge";
                         b+=(uchar)(ii%2==0?32:2);
+                        isTrigger=true;
                         break;
                     case LowLevel:
                         log+="LowLevel";
+                        isTrigger=true;
                         break;
                     case DoubleEdge:
                         log+="DoubleEdge";
                         b+=(uchar)(ii%2==0?16:1);
                         b+=(uchar)(ii%2==0?32:2);
+                        isTrigger=true;
                         break;
                     default:
                         log+="Default";
@@ -287,9 +317,11 @@ bool SessionController::start(QJsonObject json,qint32 type)
             }
             dataBytes.append(b);
         }
+        if(json["isInstantly"].toBool())
+            isTrigger=false;
         dataBytes.append((uchar)(json["isInstantly"].toBool()?1:0));
     }else if(type==1){
-        
+        //多级触发模式
         QJsonObject stageJson=json["stageTriggerData"].toObject();
     }
     LogHelp::write(log);
@@ -299,7 +331,14 @@ bool SessionController::start(QJsonObject json,qint32 type)
         m_dataService->getSessionError(m_sessionID)->setError_msg(QObject::tr("USB通讯失败，无法发送指令。"),false);
         return false;
     }
+    if(!isTrigger && !isBuffer)
+        return true;
+    m_progressBarShow=true;
     return true;
+}
+
+bool SessionController::getProgressBarShow(){
+    return m_progressBarShow;
 }
 
 void SessionController::stop()
@@ -356,8 +395,8 @@ bool SessionController::decode(QString decodeID, QJsonObject json)
     connect(m_session->getDecode(decodeID), &DecodeController::sendDecodeSchedule,this, &SessionController::sendDecodeSchedule);
     connect(this, &SessionController::sendDecodeAnalysis, m_session->getDecode(decodeID), &DecodeController::decodeAnalysis);
     quint32 multiply=qMax((qint32)m_session->m_segment->GetMultiply(),1);
-    emit sendDecodeAnalysis(m_session->m_segment, m_channelCount, json["main"].toObject()["start"].toString().toLongLong(),
-            json["main"].toObject()["end"].toString().toLongLong(),m_session->m_config->m_maxUnit/multiply);
+    emit sendDecodeAnalysis(m_session->m_segment, json["main"].toObject()["start"].toString().toLongLong(),
+            json["main"].toObject()["end"].toString().toLongLong(),m_session->m_config->m_maxUnit/multiply, false);
     disconnect(this,&SessionController::sendDecodeAnalysis,nullptr,nullptr);
     m_session->m_segment->lessenCite();
     return true;
@@ -386,7 +425,7 @@ void SessionController::restartAllDecode()
     QHash<QString,DecodeController*> list=m_session->getDecodeList();
     for(auto &i : list){
         connect(this, &SessionController::sendRestartDevice, i, &DecodeController::restart);
-        emit sendRestartDevice(m_session->m_segment,m_session->m_config->m_maxUnit);
+        emit sendRestartDevice(m_session->m_segment,m_session->m_config->m_maxUnit,false);
         disconnect(this,&SessionController::sendRestartDevice,nullptr,nullptr);
     }
 }
@@ -398,7 +437,7 @@ void SessionController::restartDecode(QString decodeID)
     decode->stopDedoceAnalysis();
     decode->waitStopDedoceAnalysis();
     connect(this, &SessionController::sendRestartDevice, decode, &DecodeController::restart);
-    emit sendRestartDevice(m_session->m_segment,m_session->m_config->m_maxUnit);
+    emit sendRestartDevice(m_session->m_segment,m_session->m_config->m_maxUnit,false);
     disconnect(this,&SessionController::sendRestartDevice,nullptr,nullptr);
 }
 
@@ -430,6 +469,16 @@ void SessionController::removeDecode(QString decodeID)
     m_session->removeDecode(decodeID);
 }
 
+void SessionController::cleanAllDecode()
+{
+    QHash<QString,DecodeController*> list=m_session->getDecodeList();
+    for(auto &i : list){
+        i->stopDedoceAnalysis();
+        i->waitStopDedoceAnalysis();
+        i->deleteData();
+    }
+}
+
 void SessionController::setDecodeShowJson(QString decodeID, QJsonObject json)
 {
     if(m_session==nullptr)
@@ -451,7 +500,7 @@ QVariantMap SessionController::getShowConfig()
 void SessionController::setScrollBarPosition(double position)
 {
     m_session->m_config->m_showStartUnit=position*m_session->m_config->m_maxUnit;
-    emit sessionDrawUpdate(true);
+    emit sessionDrawUpdate(-2);
 }
 
 void SessionController::saveData(QString path, QString sessionName)
@@ -465,6 +514,21 @@ void SessionController::saveData(QString path, QString sessionName)
         type=FileType::SourceFile;
     if(type!=FileType::NotFile)
         m_session->SaveFile(path, sessionName, type);
+}
+
+void SessionController::saveBinData(QString path, qint32 type_, QString channels)
+{
+    FileType type=FileType::NotFile;
+    QString suffix=path.right(path.length()-path.lastIndexOf(".")).toLower();
+    pathRepair(path);
+    if(suffix==".bin"){
+        if(type_==0)
+            type=FileType::BinSampleFile;
+        else if(type_==1)
+            type=FileType::BinNsFile;
+        if(type!=FileType::NotFile)
+            m_session->SaveFile(path, channels, type);
+    }
 }
 
 bool SessionController::needSaveData()
@@ -522,7 +586,7 @@ QJsonArray SessionController::getGlitchRemoval()
 
 void SessionController::openFile(QString path)
 {
-    m_session->LoadFile(path);
+    m_session->LoadFile(path,true);
 }
 
 qint64 SessionController::getChannelMaxSample(qint8 channelID)
@@ -590,8 +654,10 @@ bool SessionController::isGlitchRemoval()
 
 void SessionController::startDecodeTmp()
 {
-    for(qint32 i=0;i<m_decodeTmp.count();i++)
+    for(qint32 i=0;i<m_decodeTmp.count();i++){
         emit appendDecode(m_decodeTmp[i]);
+        QThread::msleep(10);
+    }
     m_decodeTmp.clear();
 }
 
@@ -611,13 +677,103 @@ void SessionController::saveDecodeTable(QString filePath)
     m_session->saveDecodeTable(filePath);
 }
 
-void SessionController::setShowStart(qint64 showStart)
+void SessionController::setShowStart(qint64 showStart, qint32 refreshState)
 {
     for(qint32 i=0;i<m_session->m_segment->m_isFirst.count();i++)
         m_session->m_segment->m_isFirst[i]=true;
     if(showStart>=0)
-        m_session->m_config->m_showStartUnit=showStart;
-    emit sessionDrawUpdate();
+        m_session->m_config->m_showStartUnit=getShowStart(showStart);
+    emit sessionDrawUpdate(refreshState);
+}
+
+void SessionController::switchVernier(bool isUp,bool isZoom)
+{
+    qint32 count=m_session->m_vernier.count();
+    bool isSet=false;
+    for(qint32 i=0;i<count;i++){
+        if(m_session->m_vernier[i].isSelect && m_session->m_vernier[i].visible){
+            qint32 index=i;
+            if(isUp){
+                index--;
+                if(index<0)
+                    index=count-1;
+                while(index!=i){
+                    if(m_session->m_vernier[index].visible){
+                        m_session->m_vernier[i].isSelect=false;
+                        m_session->m_vernier[index].isSelect=true;
+                        showViewScope(m_session->m_vernier[index].position,m_session->m_vernier[index].position,isZoom);
+                        isSet=true;
+                        break;
+                    }
+                    index--;
+                    if(index<0)
+                        index=count-1;
+                }
+            }else{
+                index++;
+                if(index>=count)
+                    index=0;
+                while(index!=i){
+                    if(m_session->m_vernier[index].visible){
+                        m_session->m_vernier[i].isSelect=false;
+                        m_session->m_vernier[index].isSelect=true;
+                        showViewScope(m_session->m_vernier[index].position,m_session->m_vernier[index].position,isZoom);
+                        isSet=true;
+                        break;
+                    }
+                    index++;
+                    if(index>=count)
+                        index=0;
+                }
+            }
+            break;
+        }
+    }
+    if(!isSet){
+        for(qint32 i=0;i<count;i++){
+            if(m_session->m_vernier[i].visible){
+                m_session->m_vernier[i].isSelect=true;
+                showViewScope(m_session->m_vernier[i].position,m_session->m_vernier[i].position,isZoom);
+                break;
+            }
+        }
+    }
+}
+
+qint64 SessionController::getShowStart()
+{
+    return m_session->m_config->m_showStartUnit;
+}
+
+qint64 SessionController::getShowStart(qint64 showStart)
+{
+    if(showStart>m_session->m_config->m_maxUnit-m_session->m_config->m_showConfig.m_pixelUnit*(m_session->m_config->m_width-15))
+        showStart=m_session->m_config->m_maxUnit-m_session->m_config->m_showConfig.m_pixelUnit*(m_session->m_config->m_width-15);
+    if(showStart<=0)
+        showStart=0;
+    return showStart;
+}
+
+qint64 SessionController::getShowStartMultiply()
+{
+    if(m_session->m_segment!=nullptr && m_session->m_segment->GetMultiply()>0)
+        return m_session->m_config->m_showStartUnit/m_session->m_segment->GetMultiply();
+    return 0;
+}
+
+qint64 SessionController::getXWheelPosition(bool isUp, qint32 count)
+{
+    if(isUp)
+        return m_session->m_config->m_showStartUnit-m_session->m_config->m_showConfig.m_pixelUnit*(m_session->m_config->m_width*0.2)*count;
+    else
+        return m_session->m_config->m_showStartUnit+m_session->m_config->m_showConfig.m_pixelUnit*(m_session->m_config->m_width*0.2)*count;
+}
+
+void SessionController::reloadDecoder()
+{
+    QHash<QString,DecodeController*> list=m_session->getDecodeList();
+    for(auto &i : list)
+        i->reloadDecoder();
 }
 
 void SessionController::wheelRoll(bool isUp,qint32 x)
@@ -665,7 +821,7 @@ custom:
     config.m_pixelUnit=(qreal)m_session->m_config->m_maxUnit/(m_session->m_config->m_width-15);
     config.m_scalePixel=config.m_unitMultiply/config.m_pixelUnit;
     m_session->m_config->m_showStartUnit=0;
-    
+    //刷新最大索引
     m_session->m_config->m_selectShowIndex=m_session->m_config->m_showList.count()-1;
     while(m_session->m_config->m_selectShowIndex>0){
         SessionShowConfig config_tmp=m_session->m_config->m_showList[m_session->m_config->m_selectShowIndex];

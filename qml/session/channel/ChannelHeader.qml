@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import atk.qml.Controls 1.0
 import "../../config"
@@ -42,6 +26,10 @@ Item {
                 drawChannelHeader.isCreating=false;
                 sConfig.isVernierStart=false;
             }
+        }
+
+        function onVernierCancelMove(){
+            drawChannelHeader.vernierCancelMove();
         }
     }
     Connections{
@@ -78,12 +66,15 @@ Item {
                         height: parent.height
                         width: parent.width-30
                         Image {
+                            width: sConfig.isExpandSidebar?88:23
+                            height: 22
+                            fillMode: Image.PreserveAspectFit
                             anchors{
                                 verticalCenter: parent.verticalCenter
                                 horizontalCenter: parent.horizontalCenter
                                 horizontalCenterOffset: 5
                             }
-                            source: sConfig.isExpandSidebar?"qrc:resource/image/ChannelIcon.png":"qrc:resource/image/ChannelSingleIcon.png"
+                            source: sConfig.isExpandSidebar?"qrc:resource/image/ChannelIcon_"+Config.language+".png":"qrc:resource/image/ChannelSingleIcon.png"
                         }
                     }
                     ImageButton{
@@ -92,6 +83,8 @@ Item {
                         anchors{
                             right: parent.right
                         }
+                        imageWidth: 6
+                        imageHeight: 10
                         imageSource: "resource/icon/"+Config.tp+"/Expand.png"
                         imageEnterSource: "resource/icon/"+Config.tp+"/ExpandEnter.png"
                         imageDisableSource: "resource/icon/"+Config.tp+"/ExpandEnter.png"
@@ -103,6 +96,7 @@ Item {
                     id: drawChannelHeader
                     height: Config.headerHeight
                     width: parent.width-channelIcon.width
+                    enabled: !sConfig.isRun
                     isExit: sConfig.isExit
                     MouseArea{
                         anchors.fill: parent

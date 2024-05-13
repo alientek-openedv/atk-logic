@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 import "../style"
@@ -28,6 +12,9 @@ Rectangle {
         width: 34
         height: parent.height
         Image {
+            width: 20
+            height: 20
+            fillMode: Image.PreserveAspectFit
             anchors{
                 horizontalCenter: parent.horizontalCenter
                 horizontalCenterOffset: 3
@@ -69,6 +56,7 @@ Rectangle {
             text: qsTr("ALIENTEK.LogicView ")+"V"+app_VERSION
             anchors.centerIn: parent
             color: Config.textColor
+            font.pixelSize: 12
         }
     }
 
@@ -82,6 +70,8 @@ Rectangle {
             id: helpButton
             width: 35
             height: parent.height
+            imageWidth: 5
+            imageHeight: 9
             imageSource: "resource/icon/"+Config.tp+"/Help.png"
             imageEnterSource: imageSource
             backgroundColor: rootRectangle.color
@@ -96,6 +86,8 @@ Rectangle {
             id: minButton
             width: 35
             height: parent.height
+            imageWidth: 10
+            imageHeight: 10
             imageSource: "resource/icon/"+Config.tp+"/Min.png"
             imageEnterSource: imageSource
             backgroundColor: rootRectangle.color
@@ -107,6 +99,8 @@ Rectangle {
             id: maxButton
             width: 35
             height: parent.height
+            imageWidth: 10
+            imageHeight: 10
             imageSource: "resource/icon/"+Config.tp+"/"+(root.windowState===2?"MaxIn.png":"Max.png")
             imageEnterSource: imageSource
             backgroundColor: rootRectangle.color
@@ -123,6 +117,8 @@ Rectangle {
             id: closeButton
             width: 35
             height: parent.height
+            imageWidth: 10
+            imageHeight: 10
             imageSource: "resource/icon/"+Config.tp+"/Close.png"
             imageEnterSource: imageSource
             backgroundColor: rootRectangle.color

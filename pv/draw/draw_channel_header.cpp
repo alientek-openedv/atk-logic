@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "draw_channel_header.h"
+﻿#include "draw_channel_header.h"
 
 DrawChannelHeader::DrawChannelHeader(QQuickItem* parent): QQuickPaintedItem(parent)
 {
@@ -52,6 +36,7 @@ void DrawChannelHeader::drawScale(QPainter* painter, quint32 position, QString t
 {
     if(isHigh){
         painter->drawLine(QLineF(position, m_highLineTop, position, height()));
+        //painter->fillRect(position-1,m_highLineTop,3,m_highLineBottom,m_text_color);
         painter->drawText(position,10,text);
     }else{
         painter->drawLine(QLineF(position, m_lowLineTop, position, height()));
@@ -124,6 +109,7 @@ void DrawChannelHeader::paint(QPainter* painter)
     font.setPixelSize(11);
     painter->setFont(font);
 
+    //绘制标尺
     painter->setPen(QPen(m_text_color, 1));
 
     double drawPosition=0;
@@ -220,12 +206,12 @@ bool DrawChannelHeader::vernierMethod(QPainter *painter)
             painter->setPen(QPen(color, 1));
             painter->drawLine(temp,m_height-4,temp,m_height);
             QString text=data.id==0?"T":QString::number(data.id);
-            qint32 fontWidth=painter->fontMetrics().width(text);
+            qint32 fontWidth=painter->fontMetrics().horizontalAdvance(text);
             painter->setPen(QPen(Qt::white, 1));
             painter->drawText(temp-fontWidth/2,top+12,text);
             if(data.isSelect)
             {
-                emit showVernierPopup(m_session->m_vernier[i].id, temp+10);
+                emit showVernierPopup(data.id, temp+10);
                 ret=true;
             }
         }else
@@ -239,9 +225,11 @@ bool DrawChannelHeader::vernierMethod(QPainter *painter)
             if(isSelect)
             {
                 ret=true;
-                emit showVernierPopup(m_session->m_vernier[i].id,m_mousePoint.x()+10);
-                if(data.id!=0)
+                emit showVernierPopup(data.id,m_mousePoint.x()+10);
+                if(data.id!=0){
                     m_vernierMoveIndex=i;
+                    m_vernierMovePosition=data.position;
+                }
             }
         }
     }
@@ -269,7 +257,8 @@ void DrawChannelHeader::mousePressEvent(QMouseEvent* event)
     if(m_isExit)
         return;
     m_mousePoint=event->pos();
-    if(event->button()==Qt::LeftButton){
+    m_currentButton=event->button();
+    if(m_currentButton==Qt::LeftButton){
         if(m_isCreating)
             emit vernierCreateComplete();
         else
@@ -280,7 +269,7 @@ void DrawChannelHeader::mousePressEvent(QMouseEvent* event)
             emit vernierMoveState(true,m_session->m_vernier[m_vernierMoveIndex].id);
             update();
         }
-    }else if(event->button()==Qt::RightButton){
+    }else if(m_currentButton==Qt::RightButton){
         if(m_isCreating){
             emit vernierCreateComplete();
             emit deleteVernier(m_session->m_vernier[m_session->m_vernier.count()-1].id);
@@ -309,10 +298,15 @@ void DrawChannelHeader::mouseReleaseEvent(QMouseEvent* event)
     if(m_isExit)
         return;
     m_mousePoint=event->pos();
-    vernierMethod(nullptr);
-    if(m_vernierMoveIndex!=-1)
-        emit vernierMoveState(false,m_session->m_vernier[m_vernierMoveIndex].id);
-    m_vernierMoveIndex=-1;
+    if(m_currentButton==Qt::LeftButton){
+        vernierMethod(nullptr);
+        if(m_vernierMoveIndex!=-1)
+            emit vernierMoveState(false,m_session->m_vernier[m_vernierMoveIndex].id);
+        m_vernierMoveIndex=-1;
+    }else if(m_currentButton==Qt::RightButton){
+        if(m_vernierMoveIndex!=-1)
+            vernierCancelMove();
+    }
     emit m_session->drawUpdate();
 }
 
@@ -321,20 +315,21 @@ void DrawChannelHeader::mouseDoubleClickEvent(QMouseEvent *event)
     if(m_isExit)
         return;
     m_mousePoint=event->pos();
-    QRect r(m_mousePoint.x()-1,m_mousePoint.y()-1,3,3);
-    if(r.contains(event->pos())){
-        if(!vernierMethod() && !m_isCreating)
+    m_currentButton=event->button();
+    if(m_currentButton==Qt::LeftButton){
+        QRect r(m_mousePoint.x()-1,m_mousePoint.y()-1,3,3);
+        if(r.contains(event->pos())){
+            if(!vernierMethod() && !m_isCreating)
+                appendVernierData(event->x());
+            update();
+        }else if(!m_isCreating)
             appendVernierData(event->x());
-        update();
-    }else if(!m_isCreating)
-        appendVernierData(event->x());
+    }
+
 }
 
 qint64 DrawChannelHeader::getAdsorbPosition(qint32 x)
 {
-    qint32 multiply=m_session->m_segment->GetMultiply();
-    if(multiply<1)
-        multiply=1;
     return m_session->m_config->m_showConfig.m_pixelUnit*qMax(x,0)+m_session->m_config->m_showStartUnit;
 }
 
@@ -380,6 +375,18 @@ void DrawChannelHeader::createVernier()
         appendVernierData(0);
         m_selectVernierIndex=m_session->m_vernier.count()-1;
         emit vernierCreate();
+    }
+}
+
+void DrawChannelHeader::vernierCancelMove()
+{
+    if(m_vernierMoveIndex!=-1){
+        qint32 tmp=m_selectVernierIndex;
+        m_selectVernierIndex=-1;
+        m_isCreating=false;
+        m_session->m_vernier[tmp].position=m_vernierMovePosition;
+        emit vernierDataChanged(m_session->m_vernier[tmp].id);
+        emit m_session->drawUpdate();
     }
 }
 

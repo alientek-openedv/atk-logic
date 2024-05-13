@@ -1,20 +1,9 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
+﻿#include "frameless_window.h"
 
-#include "frameless_window.h"
+#ifdef Q_OS_LINUX
+#include <X11/Xlib.h>
+#include <QX11Info>
+#endif
 
 #ifdef Q_OS_WIN
 enum class Style : DWORD
@@ -50,8 +39,8 @@ class TaoFrameLessViewPrivate
 public:
     bool m_firstRun = true;
     HMENU mMenuHandler = NULL;
-    bool borderless = true;        
-    bool borderless_shadow = false; 
+    bool borderless = true;        // is the window currently borderless
+    bool borderless_shadow = false; // should the window display a native aero shadow while borderless
     void setBorderLess(HWND handle, bool enabled)
     {
         auto newStyle = enabled ? selectBorderLessStyle() : Style::windowed;
@@ -61,7 +50,13 @@ public:
         {
             borderless = enabled;
             ::SetWindowLongPtrW(handle, GWL_STYLE, static_cast<LONG>(newStyle));
+
+            // when switching between borderless and windowed, restore appropriate shadow state
             setShadow(handle, borderless_shadow && (newStyle != Style::windowed));
+
+            // redraw frame
+            //            ::SetWindowPos(handle, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
+            //            ::ShowWindow(handle, SW_SHOW);
         }
     }
 
@@ -82,6 +77,9 @@ FramelessWindow::FramelessWindow(QWindow *parent)
 
 {
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF8"));
+
+    m_windowVersion = QSysInfo::windowsVersion();
+
 #ifdef Q_OS_WIN
     d=new TaoFrameLessViewPrivate();
 #else
@@ -89,6 +87,16 @@ FramelessWindow::FramelessWindow(QWindow *parent)
 #endif
 
     m_dataService = DataService::getInstance();
+    m_shared=&m_dataService->m_shared;
+    QString path=QCoreApplication::applicationDirPath()+"/update.exe";
+    QFile file(path);
+    if(file.exists()){
+        QFile::setPermissions(path, QFile::ReadOther | QFile::WriteOther);
+        file.remove();
+    }
+
+    cleanTempFile();
+
     LogHelp::write(QString("窗口创建"));
 
     setResizeMode(SizeRootObjectToView);
@@ -100,6 +108,7 @@ FramelessWindow::FramelessWindow(QWindow *parent)
     });
 
     connect(this, &QQuickView::windowStateChanged, this, &FramelessWindow::onWindowStateChanged);
+    connect(this, &FramelessWindow::sendSharedLock, &m_sharedThread, &SharedThread::lock);
     connect(this, &FramelessWindow::sendCheckDeviceCreanInfo, &m_connect, &ConnectDevice::CheckDeviceCreanInfo);
     connect(this, &FramelessWindow::sendCheckUpdate, &m_connect, &ConnectDevice::CheckUpdate);
     connect(this, &FramelessWindow::sendCheckHardwareUpdate, &m_connect, &ConnectDevice::CheckHardwareUpdate);
@@ -107,38 +116,28 @@ FramelessWindow::FramelessWindow(QWindow *parent)
     connect(&m_connect, &ConnectDevice::SendConnectSchedule, this, &FramelessWindow::sendConnectSchedule);
     connect(&m_connect, &ConnectDevice::SendCheckUpdateDate, this, &FramelessWindow::sendCheckUpdateDate);
     connect(&m_connect, &ConnectDevice::SendHardwareCheckUpdateDate, this, &FramelessWindow::sendHardwareCheckUpdateDate);
+
+    //居中显示
     setWidth(900);
     setHeight(650);
-    QRect rect=this->screen()->availableGeometry();
-    setPosition(QPoint(rect.width()/2-width()/2,rect.height()/2-height()/2));
+
+    moveToScreenCenter();
+
+    //加载语言
     if(!m_zhTrans.load(QString(":/translations/zh_CN.qm")))
         LogHelp::write(QString("加载中文语言失败"));
     if(!m_enTrans.load(QString(":/translations/en_US.qm")))
         LogHelp::write(QString("加载英文语言失败"));
+    //加载记录语言
     m_lengArr.append("zh_CN");
     m_lengArr.append("en_US");
-    bool isSetLang=false;
-    for(qint32 i=0;i<m_lengArr.length();i++){
-        QFile f(QDir::tempPath()+"/ATK-Logic/"+m_lengArr[i]);
-        if(f.exists()){
-            isSetLang=true;
-            m_firstLanguage=m_lengArr[i];
-            break;
-        }
-    }
-    if(!isSetLang){
-        
-        QLocale locale;
-        if(locale.language() == QLocale::English)  
-            m_firstLanguage="en_US";
-        else
-            m_firstLanguage="zh_CN";
-    }
 }
 
 void FramelessWindow::initSet(qint32 decode_init_code)
 {
+    //初始化函数，全局唯一启动时候创建
     m_dataService->setWindowError(qobject_cast <WindowError*>(m_dataService->getRoot()->findChild<QObject*>("windowError")));
+
 #ifdef WIN_DEVICE_CHECK
     if(!registerDeviceNotification())
         m_dataService->getWindowError()->setError_msg(QObject::tr("注册USB事件失败"),true);
@@ -150,6 +149,11 @@ void FramelessWindow::initSet(qint32 decode_init_code)
     connect(m_usbHotplug, &USBHotplug::DevicePlugOUT, this, &FramelessWindow::onDevicePlugOUT);
     emit sendStartUSBHotplug();
 #endif
+
+    //全局快捷键类
+    //m_hotkey=new HotKey(this);
+
+
     if(decode_init_code==0)
         decode_init_code=m_dataService->getDecodeServer()->Init();
 
@@ -166,17 +170,18 @@ void FramelessWindow::initSet(qint32 decode_init_code)
     case 0:
         setDecodeJson(m_dataService->getDecodeServer()->getDecodeJson());
     }
+
     USBServer* usbServer=m_dataService->getUSBServer();
-    m_updateDownload=new ThreadDownload(usbServer, nullptr);
+    m_updateDownload=new ThreadDownload(usbServer, nullptr, m_rootDir);
     connect(&m_connect, &ConnectDevice::EnterBootloader, m_updateDownload, &ThreadDownload::onEnterBootloader);
     connect(m_updateDownload, &ThreadDownload::SendDownloadSchedule, this, &FramelessWindow::sendDownloadSchedule);
     connect(this, &FramelessWindow::sendDownload, m_updateDownload, &ThreadDownload::startDownload);
     connect(this, &FramelessWindow::sendStartDownloadFirmware, m_updateDownload, &ThreadDownload::startDownloadFirmware);
-    moveToScreenCenter();
 }
 
 void FramelessWindow::initLanguage()
 {
+    //设置语言
     setLanguage(m_firstLanguage);
     setFirstLanguage(m_firstLanguage);
 }
@@ -191,6 +196,8 @@ FramelessWindow::~FramelessWindow()
     if (d->mMenuHandler != NULL)
         ::DestroyMenu(d->mMenuHandler);
 #endif
+    //    if(m_hotkey!=nullptr)
+    //        delete m_hotkey;
 }
 
 QVariant FramelessWindow::createSession(QVariant name, QVariant channelCount, QVariant type, QVariant port, QString usbName, qint32 level)
@@ -225,11 +232,12 @@ void FramelessWindow::setLanguage(QString lang)
     else
         m_lastTrans=&m_zhTrans;
     for(qint32 i=0;i<m_lengArr.length();i++){
-        QFile f(QDir::tempPath()+"/ATK-Logic/"+m_lengArr[i]);
+        QFile f(m_rootDir+"/"+m_lengArr[i]);
         if(f.exists())
             f.remove();
     }
-    QFile f(QDir::tempPath()+"/ATK-Logic/"+lang);
+    m_language=lang;
+    QFile f(m_rootDir+"/"+lang);
     f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate);
     f.close();
     m_dataService->m_app->installTranslator(m_lastTrans);
@@ -250,16 +258,20 @@ void FramelessWindow::windowClose()
     QList<USBControl *> allDevice = usbService->GetAllDevice(true);
     for(auto &i : allDevice)
     {
-        if(!i->m_NoDevice && i->IsInit() && !i->m_busy){
+        if(!i->m_NoDevice && i->IsInit()){
             i->SetResetState(1);
             QThread::msleep(30);
             i->CloseAllPWM();
             i->Exit();
             QThread::msleep(30);
             i->SetResetState(0);
+            m_shared->removeConnectDevice(i->GetPort());
         }
     }
-    deleteEmptyDir(QDir::tempPath()+"/ATK-Logic/temp");
+    //删除保存目录下的空目录
+    cleanTempFile();
+    deleteEmptyDir(m_rootDir+"/temp");
+
     LogHelp::close();
     QString exit_cmd = "taskkill /f /PID " + QString::number(QCoreApplication::applicationPid());
     qApp->quit();
@@ -283,14 +295,14 @@ bool FramelessWindow::registerDeviceNotification()
     HDEVNOTIFY hDeviceNotify;
     GUID  guid_hiv = { 0xA5DCBF10L, 0x6530, 0x11D2, { 0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED } };
     DEV_BROADCAST_DEVICEINTERFACE NotificationFilter;
-    HWND hWnd = (HWND)(this->winId()); 
+    HWND hWnd = (HWND)(this->winId()); //获取当前窗口句柄
     ZeroMemory(&NotificationFilter, sizeof(NotificationFilter));
     NotificationFilter.dbcc_size = sizeof(DEV_BROADCAST_DEVICEINTERFACE);
     NotificationFilter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
     NotificationFilter.dbcc_classguid = guid_hiv;
     hDeviceNotify = RegisterDeviceNotification (hWnd, &NotificationFilter, DEVICE_NOTIFY_WINDOW_HANDLE);
     LogHelp::write(QString("注册window消息:%1").arg(hDeviceNotify != NULL));
-    return (hDeviceNotify != NULL); 
+    return (hDeviceNotify != NULL); //true 注册消息成功
 }
 #endif
 
@@ -298,6 +310,7 @@ bool FramelessWindow::registerDeviceNotification()
 
 void FramelessWindow::openFile(QString path)
 {
+    QThread::msleep(100);
     pathRepair(path);
     LogHelp::write(QString("打开文件:%1").arg(path));
     createSession(getStringMiddle(path,"/",".",path.lastIndexOf("/")),m_dataService->m_channelCount,(int)SessionType::File,path);
@@ -313,7 +326,7 @@ void FramelessWindow::checkHardwareUpdate()
     if(m_connectPort!=-1)
     {
         USBControl* usb=m_dataService->getUSBServer()->PortGetUSB(m_connectPort);
-        emit sendCheckHardwareUpdate(usb->m_mcuVersion,usb->m_fpgaVersion);
+        emit sendCheckHardwareUpdate(usb->m_mcuVersion,usb->m_fpgaVersion,usb->m_deviceVersion);
     }
 }
 
@@ -347,12 +360,13 @@ void FramelessWindow::enterBootloader()
     }
 }
 
-QString FramelessWindow::getVersion(bool isMCU)
+QString FramelessWindow::getVersionStr()
 {
     if(m_connectPort!=-1)
     {
         USBControl* usb=m_dataService->getUSBServer()->PortGetUSB(m_connectPort);
-        return QString::number(isMCU?usb->m_mcuVersion:usb->m_fpgaVersion);
+        return "MCU: "+QString::number(usb->m_mcuVersion)+"  FPGA: "+QString::number(usb->m_fpgaVersion)+
+                "  HWV: "+QString::number(usb->m_deviceVersion);
     }
     return "";
 }
@@ -368,9 +382,10 @@ bool FramelessWindow::isWindows()
 
 void FramelessWindow::initMethod()
 {
-    
+    //首次启动检测设备
+    checkedLock();
     onDevicePlugIN();
-    
+    //获取命令行参数
     QStringList arguments = QCoreApplication::arguments();
     arguments.pop_front();
     for(auto &i : arguments){
@@ -384,21 +399,22 @@ void FramelessWindow::initMethod()
 
 bool FramelessWindow::openDataResources()
 {
-    QString path=QCoreApplication::applicationDirPath()+"/ATK-Logic_V1.0.pdf";
+    QString path=QCoreApplication::applicationDirPath()+"/ATK-Logic_"+m_language+".pdf";
     QFile file(path);
 
     if(file.exists()){
 #ifdef Q_OS_WIN32
-    return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 #endif
 #ifdef Q_OS_MACX
-    QString cmd= QString("open ATK-Logic_V1.0.pdf");
-    return system(cmd.toStdString().c_str())==0;
+        QString cmd= QString("open ATK-Logic_V1.0.pdf");
+        return system(cmd.toStdString().c_str())==0;
 #endif
 #ifdef Q_OS_LINUX
-    QString cmd= QString("evince "+path);
-    return system(cmd.toStdString().c_str())==0;
+        QString cmd= QString("evince "+path);
+        return system(cmd.toStdString().c_str())==0;
 #endif
+
     }
     return false;
 }
@@ -413,26 +429,123 @@ void FramelessWindow::showMinimized_()
 #endif
 }
 
+void FramelessWindow::setDecodeLogLevel(qint32 level)
+{
+    if(level>=0 && level<=5)
+        atk_log_loglevel_set(level);
+}
+
+void FramelessWindow::reloadDecoder(qint32 level)
+{
+    qint32 ret=0;
+    atk_decoder_exit();
+    if (atk_decoder_init(QApplication::applicationDirPath().toStdString().c_str()) == ATK_OK){
+        if(level>=0 && level<=5)
+            atk_log_loglevel_set(level);
+        if(atk_decoder_load_all()!=ATK_OK)
+            ret=2;
+        else
+            ret=m_dataService->getDecodeServer()->Init();
+    }else
+        ret=1;
+
+    switch (ret) {
+    case 1:
+        m_dataService->getWindowError()->setError_msg(QObject::tr("初始化协议解码库失败，无法使用协议解码库。"),false);
+        break;
+    case 2:
+        m_dataService->getWindowError()->setError_msg(QObject::tr("获取解码库列表失败。"),false);
+        break;
+    case 3:
+        m_dataService->getWindowError()->setError_msg(QObject::tr("解码库列表为空。"),false);
+        break;
+    case 0:
+        setDecodeJson(m_dataService->getDecodeServer()->getDecodeJson());
+    }
+    emit sendReloadDecoder();
+}
+
+QVariantList FramelessWindow::getDecodeLogList()
+{
+    m_dataService->m_logLock.lock();
+    QVariantList ls=m_dataService->m_log;
+    m_dataService->m_log.clear();
+    m_dataService->m_logLock.unlock();
+    return ls;
+}
+
+QString FramelessWindow::pathRepair_(QString path)
+{
+    pathRepair(path);
+    return path;
+}
+
+void FramelessWindow::updateApp()
+{
+#ifdef Q_OS_WIN
+    QString path=QCoreApplication::applicationDirPath()+"/update.exe";
+    QFile file(path);
+    if(file.exists()){
+        QFile::setPermissions(path, QFile::ReadOther | QFile::WriteOther);
+        if(!file.remove())
+            m_dataService->getWindowError()->setError_msg(QObject::tr("删除文件失败，请检查更新程序是否启动中。"),true);
+    }
+    bool isOK=false;
+#ifdef _WIN64
+    isOK=QFile::copy(":/resource/update/update_x64.exe",path);
+#else
+    isOK=QFile::copy(":/resource/update/update_x86.exe",path);
+#endif
+    if(isOK){
+        QStringList arguments;
+        arguments.append("ATK-Logic");
+        isOK=QProcess::startDetached(path,arguments,QCoreApplication::applicationDirPath());
+        if(isOK)
+            windowClose();
+    }
+    if(!isOK)
+        m_dataService->getWindowError()->setError_msg(QObject::tr("权限不足，请以管理员权限启动后再试。"),true);
+#endif
+}
+
+void FramelessWindow::checkUpdateNow()
+{
+    SharedMemoryHelper* shared=&m_dataService->m_shared;
+    if(shared->isUpdate())
+        windowClose();
+}
+
 #pragma endregion}
 
 #pragma region "窗口事件" {
 
 void FramelessWindow::onDevicePlugIN()
 {
-    USBServer* usbService=m_dataService->getUSBServer();
+    while(!m_deviceMutex.try_lock()){
+        if(g_isUpdata==2){
+            g_isUpdata=0;
+            m_deviceMutex.unlock();
+        }
+        QApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    bool isUnLock=true;
     if(m_connectPort==-1){
-        int newPort = usbService->GetNewDevice();
+        USBServer* usbService=m_dataService->getUSBServer();
+        int newPort = usbService->GetNewDevice(m_shared->getConnectDevice());
         if(newPort!=-1)
         {
             LogHelp::write(QString("设备接入端口:%1").arg(QString::number(newPort)));
             auto tmp=usbService->PortGetUSB(newPort);
             tmp->m_busy=true;
             emit sendCheckDeviceCreanInfo(tmp,newPort);
+            isUnLock=false;
         }else if(usbService->m_lastError==LIBUSB_ERROR_ACCESS){
             usbService->m_lastError=0;
             m_dataService->getWindowError()->setError_msg(QObject::tr("读取设备权限不足，请提升程序权限再尝试。"),true);
         }
     }
+    if(isUnLock)
+        m_deviceMutex.unlock();
 }
 
 void FramelessWindow::onDevicePlugOUT()
@@ -440,7 +553,7 @@ void FramelessWindow::onDevicePlugOUT()
     USBServer* usbService=m_dataService->getUSBServer();
     qint32 errorRecodePort=usbService->m_errorPort;
     int deleteDevice=usbService->GetDeleteDevice();
-    
+    //删除连接中设备
     if(deleteDevice>0)
     {
         USBControl* usb=usbService->PortGetUSB(deleteDevice);
@@ -450,7 +563,7 @@ void FramelessWindow::onDevicePlugOUT()
         m_connectPort=-1;
         return;
     }
-    
+    //删除不存在设备
     if(usbService->m_delete.size()){
         for (int i = 0; i < usbService->m_delete.size(); i++)
         {
@@ -459,6 +572,7 @@ void FramelessWindow::onDevicePlugOUT()
             usb->m_NoDevice=true;
             while(usb->m_busy)
                 QApplication::processEvents(QEventLoop::AllEvents, 100);
+            m_shared->removeConnectDevice(usb->GetPort());
             qint32 newPort=usbService->DeviceToFile(usbService->m_delete[i]);
             emit deviceToFile(usbService->m_delete[i], newPort);
         }
@@ -474,11 +588,13 @@ void FramelessWindow::onDevicePlugOUT()
     }
 }
 
-void FramelessWindow::receiveDeviceCreanInfo(QString name, QString usbName, qint32 port, qint32 mcuVersions, qint32 fpgaVersions, qint32 level, qint8 state)
+void FramelessWindow::receiveDeviceCreanInfo(QString name, QString usbName, qint32 port, qint32 mcuVersions,
+                                             qint32 fpgaVersions, qint16 deviceVersion, qint32 level, qint8 state)
 {
     switch(state){
     case 0:
     {
+        m_shared->appendConnectDevice(port);
         m_connectPort=port;
         USBControl* usb=m_dataService->getUSBServer()->PortGetUSB(port);
         usb->m_mcuVersion=mcuVersions;
@@ -514,11 +630,40 @@ void FramelessWindow::receiveDeviceCreanInfo(QString name, QString usbName, qint
         m_firstOpenFile=false;
         break;
     }
+    m_deviceMutex.unlock();
+}
+
+void FramelessWindow::checkedLock()
+{
+    if(m_sharedThread.m_isLock && m_shared->isAttach())
+        m_shared->resetAllData();
+}
+
+void FramelessWindow::cleanTempFile()
+{
+    if(!m_shared->isAttach())
+        return;
+    QString path=m_rootDir+"/temp/";
+    if(m_shared->getU8Data(SAVE_FILE)==0){
+        QDir dir(path+"save/");
+        if(dir.exists()){
+            dir.removeRecursively();
+            dir.rmpath(path+"save/");
+        }
+    }
+    if(m_shared->getU8Data(LOAD_FILE)==0){
+        QDir dir(path+"load/");
+        if(dir.exists()){
+            dir.removeRecursively();
+            dir.rmpath(path+"save/");
+        }
+    }
 }
 
 #ifdef Q_OS_WIN
 static long hitTest(RECT winrect, long x, long y, int borderWidth)
 {
+    // 鼠标区域位于窗体边框，进行缩放
     if ((x >= winrect.left) && (x < winrect.left + borderWidth) && (y >= winrect.top) && (y < winrect.top + borderWidth))
         return HTTOPLEFT;
     else if (x < winrect.right && x >= winrect.right - borderWidth && y >= winrect.top && y < winrect.top + borderWidth)
@@ -579,28 +724,49 @@ bool FramelessWindow::nativeEvent(const QByteArray &eventType, void *message, lo
     switch(msg->message){
     case WM_DEVICECHANGE:
         if(msg->wParam == DBT_DEVICEARRIVAL)
-            onDevicePlugIN();
+            onDevicePlugIN();//设备接入
         if(msg->wParam == DBT_DEVICEREMOVECOMPLETE)
-            onDevicePlugOUT();
+            onDevicePlugOUT();//设备拔出
         break;
     case WM_CLOSE:
         windowClose();
         break;
     case WM_NCCALCSIZE: {
         const auto mode = static_cast<BOOL>(msg->wParam);
-        const auto clientRect = mode ? &(reinterpret_cast<LPNCCALCSIZE_PARAMS>(msg->lParam)->rgrc[0]) : reinterpret_cast<LPRECT>(msg->lParam);
+        //        const auto clientRect = mode ? &(reinterpret_cast<LPNCCALCSIZE_PARAMS>(msg->lParam)->rgrc[0]) : reinterpret_cast<LPRECT>(msg->lParam);
         if (mode == TRUE && d->borderless)
         {
             *result = WVR_REDRAW;
-            {
-                if (clientRect->top != 0)
-                {
-                    clientRect->top += 0.1;
-                }
-            }
+            //            {
+            //                if (clientRect->top != 0)
+            //                {
+            //                    clientRect->top += 0.1;
+            //                }
+            //            }
             return true;
         }
         *result = 0;
+        return true;
+    }
+    case WM_SETFOCUS:
+        if(m_windowVersion==QSysInfo::WinVersion::WV_WINDOWS7){
+            setGeometry(x(),y(),width()+1,height());
+            update();
+            setGeometry(x(),y(),width()-1,height());
+        }
+        break;
+    case WM_KILLFOCUS:
+        if(m_windowVersion==QSysInfo::WinVersion::WV_WINDOWS7){
+            setGeometry(x(),y(),width()+1,height());
+            update();
+            setGeometry(x(),y(),width()-1,height());
+        }
+        break;
+    case WM_ACTIVATE:{
+        MARGINS margins = { 1,1,1,1 };
+        HRESULT hr = S_OK;
+        hr = DwmExtendFrameIntoClientArea(msg->hwnd, &margins);
+        *result = hr;
         return true;
     }
     case WM_NCACTIVATE:
@@ -609,6 +775,8 @@ bool FramelessWindow::nativeEvent(const QByteArray &eventType, void *message, lo
             *result = 1;
             return true;
         }
+        if(msg->lParam==0 && m_windowVersion==QSysInfo::WinVersion::WV_WINDOWS7)
+            return true;
         break;
     case WM_NCHITTEST: {
         if(msg->wParam==0)
@@ -618,8 +786,10 @@ bool FramelessWindow::nativeEvent(const QByteArray &eventType, void *message, lo
         {
             RECT winrect;
             GetWindowRect(HWND(winId()), &winrect);
+
             long x = GET_X_LPARAM(msg->lParam);
             long y = GET_Y_LPARAM(msg->lParam);
+
             *result = 0;
             if (m_windowState != Qt::WindowMaximized && m_windowState != Qt::WindowMinimized)
             {
@@ -636,6 +806,8 @@ bool FramelessWindow::nativeEvent(const QByteArray &eventType, void *message, lo
         }
         break;
     }
+    case WM_DPICHANGED:
+        break;
     }
 #endif
     return QWindow::nativeEvent(eventType, message, result);
@@ -646,6 +818,7 @@ void FramelessWindow::onWindowStateChanged(Qt::WindowState windowState)
 #ifdef Q_OS_MACX
     setFlag(Qt::FramelessWindowHint,true);
 #endif
+
     bool isSet=true;
     if(windowState==Qt::WindowMaximized)
         m_windowMaxState=1;
@@ -662,6 +835,53 @@ void FramelessWindow::onWindowStateChanged(Qt::WindowState windowState)
         m_windowMaxState=0;
     if(isSet)
         setWindowState_(windowState);
+}
+
+QString FramelessWindow::rootDir() const
+{
+    return m_rootDir;
+}
+
+void FramelessWindow::setRootDir(const QString &newRootDir)
+{
+    if (m_rootDir == newRootDir)
+        return;
+    m_rootDir = newRootDir;
+    m_dataService->m_tempDir=m_rootDir;
+    m_sharedThread.init(m_rootDir);
+    emit sendSharedLock();
+    bool isSetLang=false;
+    for(qint32 i=0;i<m_lengArr.length();i++){
+        QFile f(m_rootDir+"/"+m_lengArr[i]);
+        if(f.exists()){
+            isSetLang=true;
+            m_firstLanguage=m_lengArr[i];
+            break;
+        }
+    }
+    if(!isSetLang){
+        //加载系统语言
+        QLocale locale;
+        if(locale.language() == QLocale::English)  //获取系统语言环境
+            m_firstLanguage="en_US";
+        else
+            m_firstLanguage="zh_CN";
+    }
+    emit rootDirChanged();
+}
+
+bool FramelessWindow::isLinuxMemoryLimit() const
+{
+    return m_isLinuxMemoryLimit;
+}
+
+void FramelessWindow::setIsLinuxMemoryLimit(bool newIsLinuxMemoryLimit)
+{
+    if (m_isLinuxMemoryLimit == newIsLinuxMemoryLimit)
+        return;
+    m_isLinuxMemoryLimit = newIsLinuxMemoryLimit;
+    g_isLinuxMemoryLimit=m_isLinuxMemoryLimit;
+    emit isLinuxMemoryLimitChanged();
 }
 
 bool FramelessWindow::firstOpenFile() const
@@ -720,11 +940,17 @@ void FramelessWindow::showEvent(QShowEvent* e)
     if (d->m_firstRun)
     {
         d->m_firstRun = false;
+        // 第一次show的时候，设置无边框。不在构造函数中设置。取winId会触发QWindowsWindow::create,直接创建win32窗口,引起错乱(win7 或者虚拟机启动即黑屏)。
         d->setBorderLess((HWND)(winId()), d->borderless);
         {
             d->mMenuHandler = ::CreateMenu();
             ::SetMenu((HWND)winId(), d->mMenuHandler);
         }
+        //        //win7下禁用aero
+        //        auto version = QSysInfo::windowsVersion();
+        //        if(version==QSysInfo::WinVersion::WV_WINDOWS7){
+        //            DwmEnableComposition(DWM_EC_DISABLECOMPOSITION);
+        //        }
     }
 #endif
     QQuickView::showEvent(e);
@@ -910,11 +1136,36 @@ void FramelessWindow::mouseMoveEvent(QMouseEvent *event)
 {
     if (event->buttons() & Qt::LeftButton) {
         if (m_currentArea == Move) {
-            
-            
+
+#ifdef Q_OS_LINUX
+            QPoint pos = this->mapToGlobal(event->pos());
+            XEvent event;
+            memset(&event, 0, sizeof(XEvent));
+
+            Display *display = QX11Info::display();
+            event.xclient.type = ClientMessage;
+            event.xclient.message_type = XInternAtom(display, "_NET_WM_MOVERESIZE", False);
+            event.xclient.display = display;
+            event.xclient.window = (XID)(winId());
+            event.xclient.format = 32;
+            event.xclient.data.l[0] = pos.x();
+            event.xclient.data.l[1] = pos.y();
+            event.xclient.data.l[2] = 8;
+            event.xclient.data.l[3] = Button1;
+            event.xclient.data.l[4] = 1;
+
+            XUngrabPointer(display, CurrentTime);
+            XSendEvent(display,
+                       QX11Info::appRootWindow(QX11Info::appScreen()),
+                       False,
+                       SubstructureNotifyMask | SubstructureRedirectMask,
+                       &event);
+            XFlush(display);
+#else
             setPosition(m_oldPos - m_startPos + event->globalPos());
             if (m_windowState == Qt::WindowMaximized)
                 showNormal();
+#endif
         } else if (m_currentArea != Move){
             setWindowGeometry(event->globalPos());
         }
@@ -923,6 +1174,7 @@ void FramelessWindow::mouseMoveEvent(QMouseEvent *event)
         m_currentArea = getArea(pos);
         setCursorIcon();
     }
+
     QQuickView::mouseMoveEvent(event);
 }
 #endif

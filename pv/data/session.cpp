@@ -1,20 +1,5 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
+﻿#include "session.h"
 
-#include "session.h"
 
 Session::Session(QString name, QString id, qint32 channelCount, SessionType type, QString path, DataService* parent)
     : QObject(0),m_sessionName(name),m_sessionID(id),m_sessionType(type),m_parent(parent),m_channelCount(channelCount),m_filePath(path)
@@ -26,6 +11,7 @@ Session::Session(QString name, QString id, qint32 channelCount, SessionType type
     connect(this,&Session::sendSaveFileThreadPara,m_workThread,&ThreadWork::SaveFileThreadPara);
     connect(this,&Session::sendSaveSourceFileThreadPara,m_workThread,&ThreadWork::SaveSourceFileThreadPara);
     connect(this,&Session::sendLoadSourceFileThreadPara,m_workThread,&ThreadWork::LoadSourceFileThreadPara);
+    connect(this,&Session::sendSaveBinFileThreadPara,m_workThread,&ThreadWork::SaveBinFileThreadPara);
     connect(this,&Session::sendGlitchRemovalThreadPara,m_workThread,&ThreadWork::GlitchRemovalThreadPara);
     connect(this,&Session::sendSaveDecodeTableThreadPara,m_workThread,&ThreadWork::SaveDecodeTableThreadPara);
     connect(this,&Session::sendCalcMeasureData,m_workThread,&ThreadWork::calcMeasureData);
@@ -50,7 +36,18 @@ Session::~Session()
     QMetaObject::invokeMethod(tab, "removeSession", Q_RETURN_ARG(QVariant, ret), Q_ARG(QVariant, m_sessionID));
 }
 
-void Session::LoadFile(QString path)
+void Session::initFile()
+{
+    //初始化错误之后才初始化数据
+    if(m_sessionType==SessionType::File)
+    {
+        if(m_filePath.endsWith(".atkdl"))
+            LogHelp::write(QString("打开工程文件:%1").arg(m_filePath));
+        LoadFile(m_filePath, true);
+    }
+}
+
+void Session::LoadFile(QString path, bool isSendDecode)
 {
     try {
         deleteSegment();
@@ -59,7 +56,7 @@ void Session::LoadFile(QString path)
         m_isShowDecode=true;
         pathRepair(path);
         if(path.endsWith(".atkdl")){
-            emit sendLoadSourceFileThreadPara(path,m_segment,m_config,&m_measure,&m_vernier,&m_decodeList,&m_channelsName);
+            emit sendLoadSourceFileThreadPara(path,m_segment,m_config,&m_measure,&m_vernier,&m_decodeList,&m_channelsName,isSendDecode);
         }
     } catch (exception &e) {
         showErrorMsg(QObject::tr("载入文件失败，错误信息:%1").arg(e.what()),true);
@@ -93,6 +90,11 @@ void Session::SaveFile(QString path, QString sessionName, FileType type)
             LogHelp::write(QString("保存工程文件:%1").arg(path));
             emit sendSaveSourceFileThreadPara(path, sessionName, m_segmentRecode, m_channelsName,&m_measure,&m_vernier,&m_decodeList);
             break;
+        case BinNsFile:
+        case BinSampleFile:
+            LogHelp::write(QString("保存原始文件:%1").arg(path));
+            emit sendSaveBinFileThreadPara(path, m_segment, type, sessionName);
+            break;
         default:
             break;
         }
@@ -111,16 +113,15 @@ bool Session::OrderStart(QByteArray dataBytes,QByteArray setBytes, double second
     try {
         USBControl* usb=getUSBControl();
         if(usb!=nullptr){
-            fpgaActive();
-            QThread::msleep(100);
+            fpgaActive();//设置唤醒FPGA
             LogHelp::write(QString("    清空缓存"));
-            while(usb->ReadSynchronous(data))
+            while(usb->ReadSynchronous(data))//启动前清空mcu缓存
                 delete[] data->buf;
             LogHelp::write(QString("    发送配置参数指令，长度：%1").arg(setBytes.size()));
             reft=usb->ParameterSetting((quint8*)setBytes.data(),setBytes.size());
             if(reft){
-                QThread::msleep(100);
-                LogHelp::write(QString("    发送启动采集指令，长度：%1").arg(dataBytes.size()));
+                QThread::msleep(30);//两个指令之间要延迟一下，不然FPGA的电压没调整好
+                LogHelp::write(QString("    发送启动采集指令，长度：%1").arg(QString::number(dataBytes.size())));
                 switch (type) {
                 case 0:
                     reft=usb->SimpleTrigger((quint8*)dataBytes.data(),dataBytes.size());
@@ -131,10 +132,15 @@ bool Session::OrderStart(QByteArray dataBytes,QByteArray setBytes, double second
                     usb->m_ThreadState=1;
                     deleteSegment();
                     m_segment = new Segment(m_channelCount);
+                    if(m_GlitchRemovalJsonArray.count()>0)
+                        m_segment->m_enableGlitchRemoval=true;
                     m_segmentRecode = m_segment;
                     m_segment->m_SamplingDepth=samplingDepth;
                     m_segment->SetSamplingFrequency(samplingFrequency/1000);
                     m_segment->m_TriggerSamplingDepth=triggerSamplingDepth;
+                    m_segment->m_collectDate=QDateTime::currentDateTime();
+                    m_segment->m_triggerDate=m_segment->m_collectDate;
+
                     m_isShowDecode=false;
                     QVector<qint8>* temp=new QVector<qint8>();
                     temp->append(channelIDList);
@@ -286,7 +292,7 @@ bool Session::setGlitchRemoval(QJsonArray json)
                 }
                 delete m_segment;
             }
-            
+            //有数据则开始重新计算过滤毛刺，否则还原原始数据
             if(isSet){
                 m_segment=segment;
                 emit sendGlitchRemovalThreadPara(m_segment);
@@ -337,6 +343,11 @@ void Session::setDecodeShowJson(QString decodeID, QJsonObject json)
     DecodeController* decode=getDecode(decodeID);
     if(decode){
         decode->setRecodeJSON(json);
+        QList<qint32> ls;
+        ls<<1<<2<<4<<8;
+        if(ls.contains(json["main"].toObject()["height"].toInt()))
+            decode->m_height=json["main"].toObject()["height"].toInt();
+        decode->m_isLockRow=json["main"].toObject()["isLockRow"].toBool();
         for(QString &key : decode->m_rowList.keys()){
             if(json.contains(key)){
                 for(auto t : json[key].toObject()["annotation_rows"].toArray()){
@@ -367,16 +378,6 @@ void Session::initError()
     SessionError *initError=m_parent->getSessionError(m_sessionID);
     assert(initError!=nullptr);
     m_workThread->initError(initError);
-
-    
-    if(m_sessionType==SessionType::File)
-    {
-        if(m_filePath.endsWith(".atkdl"))
-            LogHelp::write(QString("打开工程文件:%1").arg(m_filePath));
-        else
-            LogHelp::write(QString("打开CSV文件:%1").arg(m_filePath));
-        LoadFile(m_filePath);
-    }
 }
 
 
@@ -411,7 +412,7 @@ void Session::fpgaActive()
 {
     USBControl* usb=getUSBControl();
     if(usb!=nullptr){
-        usb->SetResetState(1);
+        usb->SetResetState(1);//设置唤醒FPGA
         Data_* data = new Data_();
         if(usb->ReadSynchronous(data))
             delete[] data->buf;

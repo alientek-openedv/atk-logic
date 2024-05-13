@@ -53,6 +53,9 @@ CTRL_TYPES = {
     19: 'FR_Swap',
     20: 'Get_PPS_Status',
     21: 'Get_Country_Codes',
+    22: 'Get_Sink_Cap_Extended',
+    23: 'Get_Source_Info',
+    24: 'Get_Revision',
 }
 
 # Data message type
@@ -418,7 +421,7 @@ class Decoder(srd.Decoder):
         return ((self.head >> 6) & 3) + 1
 
     def head_type(self):
-        return self.head & 0xF
+        return self.head & 0x1F
 
     def head_count(self):
         return (self.head >> 12) & 7

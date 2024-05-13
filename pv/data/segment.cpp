@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "segment.h"
+﻿#include "segment.h"
 #include "qdebug.h"
 
 const quint64 Segment::LevelMask[2] = {
@@ -59,6 +43,7 @@ quint8 Segment::GetChannelNum()
 
 void Segment::AddChannel()
 {
+    //初始化所有节点，数据存储量最大为每通道20GB数据
     QVector<_Node> root_vector;
     for (size_t j = 0; j < _m_CHUNK_DATA_SIZE; j++) {
         struct _Node nd;
@@ -101,22 +86,22 @@ SEGMENT_MSG Segment::SetSampleBlock(quint8 ucChannelId, quint64 ullStartPosition
     if(!checkChannelId(ucChannelId))
         return ATK_CHANNEL_ERROR;
 
-    quint16 ullNodeIndex = (ullStartPosition & LevelMask[1]) >> 26;			
-    quint32 ullNodeOffset = ullStartPosition & LevelOffset[1];				
-    quint32 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	
-    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		
+    quint16 ullNodeIndex = (ullStartPosition & LevelMask[1]) >> 26;			//除以1024*1024*64
+    quint32 ullNodeOffset = ullStartPosition & LevelOffset[1];				//取模1024*1024*64
+    quint32 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	//除以1024*1024
+    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		//取模1024*1024
 
     if(ullNodeIndex>=_m_CHUNK_DATA_SIZE)
         return ATK_POSITION_ERROR;
-    
+    //真实数据写入
     quint32 count=0;
     while(len>0){
         quint32 writeLen=qMin(m_BLOCK_MAX_SIZE-ullBlockOffset,len);
         bool isCheckCompress=ullBlockOffset+len>=m_BLOCK_MAX_SIZE;
-        
+        //判断是否没有申请内存
         if (_m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex] == NULL)
         {
-            _m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex] = malloc(m_BLOCK_MAX_SIZE);
+            _m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex] = malloc_(m_BLOCK_MAX_SIZE);
             if (_m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex] == NULL){
                 m_isMemoryError=true;
                 LogHelp::write("SetSampleBlock 申请内存失败。");
@@ -159,13 +144,15 @@ void Segment::CheckBlockCompress(quint8 ucChannelId, quint16 ullNodeIndex, quint
                 _m_DataChunks[ucChannelId][ullNodeIndex].value &= ~(1ULL << ullBlockIndex);
             free(_m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex]);
             _m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex]=nullptr;
+
+            //lpdNode
             _m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].tog=~0ull;
             if(current)
                 _m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].value=~0ull;
             else
                 _m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].value=0;
         }else{
-            
+            //lpdNode
             for(qint32 i=0;i<64;i++){
                 if(CheckCompress(current,lbp,m_BLOCK_NODE_SIZE)){
                     _m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].tog |= 1ULL << i;
@@ -179,7 +166,7 @@ void Segment::CheckBlockCompress(quint8 ucChannelId, quint16 ullNodeIndex, quint
             }
         }
     }else{
-        
+        //lpdNode
         _m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].tog=~0ull;
         if(_m_DataChunks[ucChannelId][ullNodeIndex].value & (1ULL << ullBlockIndex))
             _m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].value=~0ull;
@@ -205,10 +192,10 @@ quint8* Segment::GetSampleBlock(quint64 ullStartSample, quint64& ullEndSample, q
 {
     if(!checkChannelId(ucChannelId))
         return NULL;
-    quint64 ullBit = ullStartSample >> 3;							
-    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			
-    quint32 ullNodeOffset = ullBit & LevelOffset[1];				
-    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	
+    quint64 ullBit = ullStartSample >> 3;							//除以8
+    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			//除以1024*1024*64
+    quint32 ullNodeOffset = ullBit & LevelOffset[1];				//取模1024*1024*64
+    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	//除以1024*1024
     ullEndSample = ((ullNodeIndex << 26) + ((ullBlockIndex + 1) << 20)) << 3;
     _m_dataMutex.lock();
     quint8* ref = (quint8*)_m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex];
@@ -224,19 +211,19 @@ bool Segment::GetSample(quint64 ullStartSample, quint8 ucChannelId, bool appendO
         return false;
     if(appendOffset)
         ullStartSample+=_m_startOffsetSampling[ucChannelId];
-    quint64 ullBit = ullStartSample >> 3;							
-    quint8 ullBitOffset = ullStartSample & 7;						
-    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			
-    quint32 ullNodeOffset = ullBit & LevelOffset[1];				
-    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	
-    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		
+    quint64 ullBit = ullStartSample >> 3;							//除以8
+    quint8 ullBitOffset = ullStartSample & 7;						//取模8
+    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			//除以1024*1024*64
+    quint32 ullNodeOffset = ullBit & LevelOffset[1];				//取模1024*1024*64
+    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	//除以1024*1024
+    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		//取模1024*1024
 
     if(ullNodeIndex>=_m_DataChunks[ucChannelId].length())
         return false;
     _m_dataMutex.lock();
     quint8* ref = (quint8*)_m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex];
     _m_dataMutex.unlock();
-    
+    //tog判定
     if ((_m_DataChunks[ucChannelId][ullNodeIndex].tog & 1ULL << ullBlockIndex) != 0)
         return _m_DataChunks[ucChannelId][ullNodeIndex].value & 1ULL << ullBlockIndex;
     if (ref == NULL)
@@ -252,13 +239,13 @@ void Segment::SetSampleBlock(quint64 ullStartSample, quint64 ullEndSample, bool 
         ullStartSample+=_m_startOffsetSampling[ucChannelId];
         ullEndSample+=_m_startOffsetSampling[ucChannelId];
     }
-    quint64 ullBit = ullStartSample >> 3;							
-    quint8 ullBitOffset = ullStartSample & 7;						
-    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			
-    quint32 ullNodeOffset = ullBit & LevelOffset[1];				
-    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	
-    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		
-    quint32 ullLpdNodeIndex = ullBlockOffset>>14;                   
+    quint64 ullBit = ullStartSample >> 3;							//除以8
+    quint8 ullBitOffset = ullStartSample & 7;						//取模8
+    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			//除以1024*1024*64
+    quint32 ullNodeOffset = ullBit & LevelOffset[1];				//取模1024*1024*64
+    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	//除以1024*1024
+    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		//取模1024*1024
+    quint32 ullLpdNodeIndex = ullBlockOffset>>14;                   //除以16384
 
     _m_dataMutex.lock();
     quint8* lbp = (quint8*)_m_DataChunks[ucChannelId][ullNodeIndex].lbp[ullBlockIndex];
@@ -340,16 +327,16 @@ DataEnd Segment::GetDataEnd(quint64 ullStartSample, quint8 ucChannelId, bool isB
     DataEnd ret;
     if(!checkChannelId(ucChannelId))
         return ret;
-    
+    //加上位偏移
     ullStartSample+=_m_startOffsetSampling[ucChannelId];
 
-    quint64 ullBit = ullStartSample >> 3;							
-    quint8 ullBitOffset = ullStartSample & 7;						
-    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			
-    quint32 ullNodeOffset = ullBit & LevelOffset[1];				
-    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	
-    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		
-    quint32 ullLpdNodeIndex = ullBlockOffset>>14;                   
+    quint64 ullBit = ullStartSample >> 3;							//除以8
+    quint8 ullBitOffset = ullStartSample & 7;						//取模8
+    quint64 ullNodeIndex = (ullBit & LevelMask[1]) >> 26;			//除以1024*1024*64
+    quint32 ullNodeOffset = ullBit & LevelOffset[1];				//取模1024*1024*64
+    quint64 ullBlockIndex = (ullNodeOffset & LevelMask[0]) >> 20;	//除以1024*1024
+    quint32 ullBlockOffset = (ullNodeOffset & LevelOffset[0]);		//取模1024*1024
+    quint32 ullLpdNodeIndex = ullBlockOffset>>14;                   //除以16384
 
     if(ullNodeIndex>=_m_DataChunks[ucChannelId].length())
         return ret;
@@ -359,8 +346,9 @@ DataEnd Segment::GetDataEnd(quint64 ullStartSample, quint8 ucChannelId, bool isB
     quint64 current64Mask=current?~0ull:0;
     quint64 maxSample=GetMaxSample(ucChannelId,false)-1;
     quint64 maxSampleOffset=maxSample+_m_startOffsetSampling[ucChannelId];
+
     while(true){
-        
+        //tog判定
         if ((_m_DataChunks[ucChannelId][ullNodeIndex].tog & 1ULL << ullBlockIndex) != 0) {
             if((bool)(_m_DataChunks[ucChannelId][ullNodeIndex].value & 1ULL << ullBlockIndex)!=current)
                 goto end;
@@ -391,6 +379,19 @@ DataEnd Segment::GetDataEnd(quint64 ullStartSample, quint8 ucChannelId, bool isB
                 }
             }else{
                 while(true){
+                    //                    if(*(lbp + ullBlockOffset)!=currentMask){
+                    //                        while(true){
+                    //                            if((bool)(*(lbp + ullBlockOffset) & 1ULL << ullBitOffset)!=current){
+                    //                                _m_dataMutex.unlock();
+                    //                                goto end;
+                    //                            }
+                    //                            ullBitOffset++;
+                    //                            if(ullBitOffset>=8)
+                    //                                break;
+                    //                        }
+                    //                    }
+                    //                    ullBlockOffset++;
+
                     bool isSingle=true;
                     if((_m_DataChunks[ucChannelId][ullNodeIndex].lbpNode[ullBlockIndex].tog & 1ULL << ullLpdNodeIndex) != 0){
 
@@ -516,7 +517,7 @@ Segment *Segment::Clone()
             (*dataList)[ii].value=_m_DataChunks[i][ii].value;
             for(quint32 j=0;j<m_NODE_DATA_SIZE;j++){
                 if(_m_DataChunks[i][ii].lbp[j]){
-                    (*dataList)[ii].lbp[j]=malloc(m_BLOCK_MAX_SIZE);
+                    (*dataList)[ii].lbp[j]=malloc_(m_BLOCK_MAX_SIZE);
                     if ((*dataList)[ii].lbp[j] == NULL){
                         m_isMemoryError=true;
                         LogHelp::write("Clone 申请内存失败。");

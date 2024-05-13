@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import atk.qml.Controls 1.0
 import atk.qml.Model 1.0
@@ -31,7 +15,7 @@ Item {
     property var sessionLevel_
     property var sessionUSB
     property bool demoShowData: false
-    property int isConnect: 0
+    property int isConnect: 0//0=非连接设备，1=已连接，2=断开连接
     property string stateText
     property string filePath_
     property alias sessionSignal: sSignal
@@ -43,6 +27,8 @@ Item {
     function resetCompleted(){
         if(sessionType_===Config.SessionType.Device)
             Config.isHardwarePageConnect=true;
+        progressBar.closeButtonClick();
+        sConfig.isRun=false;
     }
 
     Component.onCompleted: {
@@ -74,7 +60,10 @@ Item {
             sConfig.isLoadSetting=true;
             load();
             init_();
+
+            //先加载配置后再加载组件
             sSignal.sideBarCanLoader();
+
             sessionLoader.sourceComponent=sessionComponent
             loadSettingEndTimer.start();
         }
@@ -94,6 +83,7 @@ Item {
                 }
             }else
                 isFirst=false;
+            //强制写死简单触发
             isSimpleTrigger=true;
             if(isFirst){
                 settingData["selectTimeIndex"]=8;
@@ -108,6 +98,9 @@ Item {
                 isSimpleTrigger=true;
                 pwmData.push({"hz":"1","unit":2,"duty":50});
                 pwmData.push({"hz":"1","unit":2,"duty":50});
+                channelsHeight.splice(0,channelsHeight.length-1);
+                for(let i=0;i<sessionChannelCount_;i++)
+                    channelsHeight[i]=62;
                 channelsDataColor=[...Config.channelDataColor];
             }else{
                 if(settingData["selectTimeIndex"]>30||settingData["selectTimeIndex"]<0)
@@ -125,6 +118,16 @@ Item {
                 var list=[1,2,5,8]
                 if(!list.concat(channelHeightMultiple))
                     channelHeightMultiple=1;
+                for(let i=0;i<sessionChannelCount_;i++){
+                    if(channelsHeight.length<i+1)
+                        channelsHeight.push(62);
+                    else{
+                        if(channelsHeight[i]<62)
+                            channelsHeight[i]=62;
+                        else if(channelsHeight[i]>800)
+                            channelsHeight[i]=800;
+                    }
+                }
                 if(favoritesList.length<=3 && favoritesList.length>=0)
                     isAddFavoritesList=false;
                 for(let j in favoritesList)
@@ -136,6 +139,7 @@ Item {
                     }
                 }
                 {
+                    //判断读入颜色配置
                     let isReset=false;
                     if(channelsDataColor.length!==sessionChannelCount_)
                         isReset=true;
@@ -152,6 +156,11 @@ Item {
                     if(isReset)
                         channelsDataColor=[...Config.channelDataColor];
                 }
+                {
+                    for(let i=0;i<decodeJson.length;i++)
+                        controller.onAppendDecode(JSON.stringify(decodeJson[i]), false);
+                    decodeJson=[];
+                }
             }
             if(isAddFavoritesList){
                 favoritesList=[];
@@ -161,19 +170,16 @@ Item {
             }
         }
     }
+
+    //会话配置文件
     SConfig{
         id: sConfig
         type: sessionType_
         name: sessionName_
-        Component.onCompleted: {
-            var i=0;
-            availableChannels=[];
-            for(i=0;i<sessionChannelCount_;i++){
-                availableChannels.push(i);
-            }
+        onIsRunChanged: {
+            refreshMenuPopupRunState();
+            sSignal.closeAllPopup();
         }
-
-        onIsRunChanged: refreshMenuPopupRunState();
 
         onLoopStateChanged: refreshMenuPopupRunState();
 
@@ -192,8 +198,11 @@ Item {
         onRefreshZoom: sessionItem.refreshZoom(state);
 
         onSessionSelect: {
-            controller.onSessionSelect();
-            refreshMenuPopupRunState();
+            if(isSelect){
+                controller.onSessionSelect();
+                refreshMenuPopupRunState();
+            }
+            closeAllPopup();
         }
 
         onCollectComplete: {
@@ -202,7 +211,8 @@ Item {
                 controller.restartGlitchRemoval();
             }else{
                 sConfig.isStopDecode=false;
-                controller.restartAllDecode();
+                if(sConfig.isBuffer)
+                    controller.restartAllDecode();
             }
             sConfig.isRun=false;
         }
@@ -223,11 +233,11 @@ Item {
         onError_msgChanged: {
             if(error_msg!="")
             {
-                console.log("qml::sessionError:"+error_msg);
                 errorDialog.titleText=qsTr("错误");
                 errorDialog.showText=error_msg;
                 errorDialog.type=0;
                 errorDialog.visible=true;
+                progressBar.visible=false;
             }
             error_msg="";
         }
@@ -248,19 +258,8 @@ Item {
     }
 
     Timer{
-        property var showStart
-        id: refreshChannelTimer
-        interval: 25
-        onTriggered: {
-            if(sConfig.isExit)
-                return;
-            controller.setShowStart(showStart);
-        }
-    }
-
-    Timer{
         id: loadSettingEndTimer
-        interval: 500
+        interval: 700
         onTriggered: sConfig.isLoadSetting=false;
     }
 
@@ -314,34 +313,29 @@ Item {
                 if(isSet)
                     progressBar.currentValue=0;
             }
-            progressBar.type=type;
+            progressBar.type=type;//0-3=采集状态,4=保存文件,5=加载文件,6=重新计算压缩的数据,7=关闭显示
             progressBar.currentValue=schedule;
             if(type===3){
                 if(schedule===100){
                     if(!sConfig.pwm0Start&&!sConfig.pwm1Start)
                         controller.fpgaDormancy();
-                    sSignal.setLiveFollowing(false,false);
+                    sSignal.setLiveFollowing(0,false);
                     if(!sConfig.isBuffer)
                         sSignal.showCollectorSchedule(0,false);
                     if(sConfig.loopState===0)
                         sConfig.loopState=1;
-                    if(sConfig.loopState===-1)
+                    else if(sConfig.loopState===-1)
                         sSignal.collectComplete();
                     else
                         sConfig.isRun=false;
                     refreshDisplayRangeTimer.start();
-                }else if(!sConfig.isBuffer){
+                }else if(!sConfig.isBuffer)
                     sSignal.showCollectorSchedule(schedule,true);
-                    if(progressBar.visible){
-                        sSignal.setLiveFollowing(true,true);
-                        progressBar.visible=false;
-                    }
-                }
             }else if(type===4||type===5||type===6){
                 if(schedule===100)
                 {
                     progressBar.visible=false;
-                    
+                    //加载文件完成，删除没有数据的通道
                     if(type===6){
                         sConfig.isStopDecode=false;
                         sConfig.isGlitchRemovaling=false;
@@ -372,7 +366,8 @@ Item {
                     sConfig.isRun=true;
                     progressBar.visible=true;
                 }
-            }
+            }else if(type===7)
+                progressBar.visible=false;
         }
 
         onMeasureDataChanged: {
@@ -410,25 +405,26 @@ Item {
         onSessionDrawUpdate: {
             if(sConfig.isExit)
                 return;
-            if(isPoll)
-                sSignal.channelRefresh(-2);
-            else
-                sSignal.channelRefresh(-1);
+            sSignal.channelRefresh(isPoll);
         }
 
         onZoomUnitShow: Signal.showZoomString(text);
-
-        onTimerDrawUpdate: {
-            refreshChannelTimer.showStart=showStart
-            if(!refreshChannelTimer.running)
-                refreshChannelTimer.start();
-        }
 
         onCalcMeasureDataComplete: sSignal.measureRefreshData(measureID);
 
         onMeasureSelectChanged: {
             sSignal.measureRefreshShow();
             sSignal.channelRefresh(-1);
+        }
+
+        onSendZipDirSchedule: {
+            progressBar.type=9
+            progressBar.currentValue=schedule;
+        }
+
+        onSendUnZipDirSchedule: {
+            progressBar.type=8
+            progressBar.currentValue=schedule;
         }
     }
 
@@ -450,14 +446,19 @@ Item {
         height: parent.height
         currentValue: 0
         onCloseButtonClick: {
+            sConfig.loopState=-1;
+            sSignal.setLiveFollowing(0,false);
             if(type<4){
-                sConfig.loopState=-1;
                 controller.stop();
-                sSignal.setLiveFollowing(false,false);
             }else{
                 controller.threadStop();
             }
         }
+    }
+
+    ExportBinPopup{
+        id: exportBinPopup
+        anchors.fill: parent
     }
 
     Connections{
@@ -473,7 +474,8 @@ Item {
                 isConnect=2;
                 sSettings.save();
                 sSettings.lockSave();
-                sSignal.sessionSelect();
+                sSignal.sessionSelect(true);
+                progressBar.closeButtonClick();
                 Config.isHardwarePageConnect=false;
             }
         }
@@ -481,20 +483,26 @@ Item {
         function onLanguageChanged(){
             controller.forceRefresh();
         }
+
+        function onSendReloadDecoder(){
+            controller.reloadDecoder();
+        }
     }
 
     Connections{
         target: Signal
-        function onSaveData(path,savePath,saveType)
+        function onSaveData(path,savePath,saveType,argument)
         {
             if(Config.tabSelectButton===sessionID_ && !sConfig.isRun && sConfig.loopState===-1 && controller.hasData()){
                 sConfig.isRun=true;
                 if(savePath)
                     sConfig.filePath=path;
-                if(saveType===0||saveType===2)
+                if(saveType===Config.SaveType.DataCSV||saveType===Config.SaveType.ATKDL)
                     controller.saveData(path, sessionName_);
-                else if(saveType===1)
+                else if(saveType===Config.SaveType.TableCSV)
                     controller.saveDecodeTable(path);
+                else
+                    sConfig.isRun=false;
             }
         }
 
@@ -523,19 +531,38 @@ Item {
                 isConnect=1;
                 sConfig.pwm1Start=false;
                 sConfig.pwm0Start=false;
+                progressBar.closeButtonClick();
                 resetCompleted();
                 Signal.resetConnectDevice(sessionID, port, true);
                 Signal.tabSelected(sessionID);
             }
         }
+
+        function onHotKey(type)
+        {
+            if(Config.tabSelectButton===sessionID_){
+                switch(type){
+                case Config.ShortcutKey.StopCollecting:
+                    controller.stopAllDecode();
+                    break;
+                }
+            }
+        }
     }
 
     Loader{
+        property int widthDuration: 0
+        property bool isShow: false
         id: sessionLoader
-        width: parent.width-sidebar.width-(sConfig.isSidebarContentShow?sidebarContent.width:0)
+        width: parent.width-sidebar.width-(isShow?sidebarContent.width:0)
         height: parent.height
         anchors.left: parent.left
-        asynchronous: true  
+        asynchronous: true  //异步加载会话
+        Behavior on width {
+            NumberAnimation {
+                duration: sessionLoader.widthDuration
+            }
+        }
     }
 
     SideBarContent{
@@ -553,11 +580,14 @@ Item {
         {
             if(sConfig.isSidebarContentShow)
             {
+                sessionLoader.widthDuration=200;
+                sessionLoader.isShow=true;
                 sidebarContent.visible=true;
                 sidebarClose.stop();
                 sidebarOpen.start();
             }
             else{
+                sessionLoader.isShow=false;
                 if(sidebarContent.x!==sidebarClose.to){
                     sidebarOpen.stop();
                     sidebarClose.start();
@@ -569,7 +599,7 @@ Item {
     XAnimator{
         target: sidebarContent;
         id: sidebarClose
-        from: sidebar.x-sidebar.width
+        from: sidebar.x-sidebarContent.width
         to: sidebar.x
         duration: 100
         alwaysRunToEnd: false
@@ -580,9 +610,10 @@ Item {
         target: sidebarContent;
         id: sidebarOpen
         from: sidebar.x
-        to: sidebar.x-sidebar.width
+        to: sidebar.x-sidebarContent.width
         duration: 100
         alwaysRunToEnd: false
+        onFinished: sessionLoader.widthDuration=0;
     }
 
     SideBar{
@@ -662,7 +693,7 @@ Item {
     }
 
 
-    
+    //会话主体
     Component{
         id: sessionComponent
 
@@ -731,7 +762,8 @@ Item {
                 function onSetLiveFollowing(isEnable,visible_){
                     sConfig.isLiveFollowingPopupShow=visible_
                     liveFollowingPopup.visible=visible_;
-                    liveFollowingPopup.setLiveFollowing(isEnable);
+                    if(isEnable!==0)
+                        liveFollowingPopup.setLiveFollowing(isEnable===1);
                 }
 
                 function onOpenTestFileSelectPopup(){
@@ -745,6 +777,8 @@ Item {
                 function onSendChannelY(channelID, type, y){
                     if(type===2)
                         drawBackground.setMouseYOffset(y);
+                    else if(type===4 || type===5)
+                        drawBackground.setCrossChannelMeasureYOffset(type===4?1:2,y)
                     else if(typeof(channelID)==="string" && "DrawBackgroundFloorID"===channelID && type===3)
                         eventDrawBackground.adsorbChannelID=y;
                 }
@@ -756,6 +790,10 @@ Item {
                         eventDrawBackground.vernierCreateModel=false;
                 }
 
+                function onVernierCancelMove(){
+                    eventDrawBackground.vernierCancelMove();
+                }
+
                 function onShowSetTips(type, visible_){
                     if(visible_)
                         setTipPopup.open();
@@ -764,13 +802,47 @@ Item {
                     switch(type){
                     case 1:
                         setTipPopup.topMargin_=150;
+                        if(Config.language==="en_US"){
+                            setTipImage.width=510;
+                            setTipImage.height=498;
+                        }else{
+                            setTipImage.width=400;
+                            setTipImage.height=476;
+                        }
                         setTipImage.source="qrc:resource/icon/"+Config.tp+"/AcquisitionParameterTip_"+Config.language+".png"
                         break;
                     case 2:
                         setTipPopup.topMargin_=398;
+                        if(Config.language==="en_US"){
+                            setTipImage.width=510;
+                            setTipImage.height=465;
+                        }else{
+                            setTipImage.width=400;
+                            setTipImage.height=419;
+                        }
                         setTipImage.source="qrc:resource/icon/"+Config.tp+"/IngestOptionsTip_"+Config.language+".png"
                         break;
+                    case 3:
+                        setTipPopup.topMargin_=170;
+                        if(Config.language==="en_US"){
+                            setTipImage.width=395;
+                            setTipImage.height=157;
+                        }else{
+                            setTipImage.width=257;
+                            setTipImage.height=158;
+                        }
+                        setTipImage.source="qrc:resource/icon/"+Config.tp+"/ProtocolSearchTip_"+Config.language+".png"
+                        break;
                     }
+                }
+
+                function onCrossChannelMeasureState(isStop){
+                    drawBackground.setCrossChannelMeasureState(isStop);
+                    eventDrawBackground.setCrossChannelMeasureState(isStop);
+                }
+
+                function onSendCrossChannelMeasurePosition(type, x, y, mouseY, position, isHit){
+                    drawBackground.setCrossChannelMeasurePosition(type, x, y, mouseY, position, isHit);
                 }
             }
 
@@ -780,6 +852,12 @@ Item {
                 {
                     if(Config.tabSelectButton===sessionID_ && !sConfig.isErrorShow){
                         switch(type){
+                        case Config.ShortcutKey.SwitchVernierUp:
+                            controller.switchVernier(true,!Setting.jumpZoom);
+                            break;
+                        case Config.ShortcutKey.SwitchVernierDown:
+                            controller.switchVernier(false,!Setting.jumpZoom);
+                            break;
                         case Config.ShortcutKey.JumpZero:
                             refreshZoom(4);
                             break;
@@ -796,7 +874,22 @@ Item {
                             if(!sConfig.isRun && !sConfig.isChannelMethodRun && !sConfig.isErrorShow)
                                 sSignal.vernierCreate(0);
                             break;
+                        case Config.ShortcutKey.DelVernierMeasure:
+                            sSignal.vernierCreate(2);
+                            let tmp=vernierListModel.getSelectID();
+                            if(tmp!==-1)
+                                vernierListModel.remove(tmp);
+                            tmp=measureTreeViewModel.getSelectID();
+                            if(tmp!==-1)
+                                sSignal.measureRemove(tmp);
+                            break;
                         }
+                    }
+                }
+
+                function onShowExportBinPopup(){
+                    if(Config.tabSelectButton===sessionID_ && !sConfig.isErrorShow){
+                        exportBinPopup.visible=true;
                     }
                 }
             }
@@ -817,6 +910,7 @@ Item {
                     id: homeDropShadowImage
                     width: 436
                     height: 322
+                    fillMode: Image.PreserveAspectFit
                     source: "../../resource/image/HomeDropShadow.png"
                     anchors{
                         centerIn: parent
@@ -837,6 +931,8 @@ Item {
                             id: homeBackgroundImage
                             width: 293
                             height: 115
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: true
                             source: "../../resource/image/HomeBackground_"+Config.tp+".png"
                             anchors{
                                 left: parent.left
@@ -858,6 +954,10 @@ Item {
                     }
                     Image {
                         id: orImage
+                        width: 19
+                        height: 19
+                        fillMode: Image.PreserveAspectFit
+                        mipmap: true
                         anchors{
                             top: homeBackgroundRectangle.bottom
                             topMargin: 26
@@ -879,6 +979,8 @@ Item {
                             id: newDemoButton
                             height: 65
                             width: 65
+                            imageWidth: 33
+                            imageHeight: 27
                             showText: "Demo"
                             underline: true
                             textColor: Config.subheadColor
@@ -894,6 +996,8 @@ Item {
                         ImageButton{
                             height: 65
                             width: 65
+                            imageWidth: 28
+                            imageHeight: 24
                             showText: qsTr("打开文件")
                             underline: true
                             textColor: Config.subheadColor
@@ -925,6 +1029,7 @@ Item {
                 visible: (sessionType_===Config.SessionType.Demo&&demoShowData)||sessionType_!==Config.SessionType.Demo
                 anchors.top: channelHeader.bottom
                 z:1
+                Component.onCompleted: controller.initFile();
             }
 
             Rectangle{
@@ -961,6 +1066,8 @@ Item {
                 width: height
                 visible: channelViewLoader.visible
                 enabled: horizontalScrollBar.position!==0
+                imageWidth: 2
+                imageHeight: 4
                 imageSource: "resource/icon/"+Config.tp+"/ScrollBarButton.png"
                 imageEnterSource: "resource/icon/"+Config.tp+"/ScrollBarButtonEnter.png"
                 imageDisableSource: "resource/icon/"+Config.tp+"/ScrollBarButtonDisable.png"
@@ -1013,6 +1120,8 @@ Item {
                 width: height
                 visible: channelViewLoader.visible
                 enabled: (horizontalScrollBar.position+horizontalScrollBar.size)!==1
+                imageWidth: 2
+                imageHeight: 4
                 imageSource: "resource/icon/"+Config.tp+"/ScrollBarButton.png"
                 imageEnterSource: "resource/icon/"+Config.tp+"/ScrollBarButtonEnter.png"
                 imageDisableSource: "resource/icon/"+Config.tp+"/ScrollBarButtonDisable.png"
@@ -1061,6 +1170,7 @@ Item {
                 width: drawBackground.width
                 height: drawBackground.height
                 visible: drawBackground.visible
+                enabled: !sConfig.isRun
                 isExit: sConfig.isExit
                 z: 0
                 anchors{
@@ -1114,6 +1224,13 @@ Item {
                         sSignal.vernierMoveComplete(id);
                     }
                 }
+
+                onCrossChannelMeasureState: sSignal.crossChannelMeasureState(isStop);
+
+                onSendCrossChannelMeasurePosition: {
+                    sSignal.sendCrossChannelMeasurePosition(type, x, y, mouseY, position, isHit);
+                    sSignal.getChannelY("DrawBackgroundFloorID", 3+type, 0);
+                }
             }
 
             MouseArea{
@@ -1152,6 +1269,8 @@ Item {
                 onWheel: {
                     if(Config.isControlEnter)
                         sSignal.channelWheel(wheel.angleDelta.y>0);
+                    else if(wheel.modifiers==Qt.AltModifier)
+                        sSignal.channelXWhell(wheel.angleDelta.x>0);
                     else
                         controller.wheelRoll(wheel.angleDelta.y>0,wheel.x);
                     wheel.accepted = true
@@ -1208,17 +1327,16 @@ Item {
                 id: setTipPopup
                 parent: parent
                 closePolicy: Popup.NoAutoClose
-                height: setTipImage.implicitHeight+10
-                width: setTipImage.implicitWidth+10
+                height: setTipImage.height+10
+                width: setTipImage.width+10
                 padding: 0
                 background: Rectangle{
                     radius: 8
                     color: "transparent"
                     Image {
                         id: setTipImage
-                        fillMode: Image.Pad
+                        fillMode: Image.PreserveAspectFit
                         anchors{
-                            fill: parent
                             margins: 5
                         }
                     }
@@ -1341,6 +1459,8 @@ Item {
                 }
             }
             Image {
+                width: 25
+                height: 97
                 visible: zoomItem.visible
                 anchors{
                     left: zoomItem.left
@@ -1400,7 +1520,8 @@ Item {
                 time/=60;
             }
         }
-        return time.toFixed(decimal).toString().replace(/(\.){0,1}0+$/,'')+" "+unit;
+
+        return parseFloat(time.toFixed(decimal)).toString().replace(/(\.)0+$/,'')+" "+unit;
     }
 
     function time22Unit(time, decimal){
@@ -1416,10 +1537,10 @@ Item {
             unit=unitList[index];
             time/=1000.0;
         }
-        return (isNegative?"-":"")+time.toFixed(decimal).toString().replace(/(\.){0,1}0+$/,'')+" "+unit;
+        return (isNegative?"-":"")+parseFloat(time.toFixed(decimal)).toString().replace(/(\.)0+$/,'')+" "+unit;
     }
 
-    function hz2Unit(hz){
+    function hz2Unit(hz, decimal){
         if(typeof(hz)==="undefined")
             return "";
         var unitList=["Hz","KHz","MHz","GHz"]
@@ -1430,7 +1551,7 @@ Item {
             unit=unitList[index];
             hz/=1000.0;
         }
-        return hz.toFixed(6).toString().replace(/(\.){0,1}0+$/,'')+" "+unit;
+        return parseFloat(hz.toFixed(decimal)).toString().replace(/(\.)0+$/,'')+" "+unit;
     }
 
     function sa2Unit(sa){
@@ -1444,12 +1565,12 @@ Item {
             unit=unitList[index];
             sa/=1000.0;
         }
-        return sa.toFixed(6).toString().replace(/(\.){0,1}0+$/,'')+" "+unit;
+        return parseFloat(sa.toFixed(6)).toString().replace(/(\.)0+$/,'')+" "+unit;
     }
 
     function refreshZoom(state){
         if(sConfig.isRun && !sConfig.isBuffer && sessionType_===Config.SessionType.Device && sConfig.isLiveFollowingPopupShow)
-            sSignal.setLiveFollowing(false,true);
+            sSignal.setLiveFollowing(2,true);
         controller.onRefreshZoom(state);
         controller.sessionDrawUpdate();
     }

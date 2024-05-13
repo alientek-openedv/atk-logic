@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef DRAW_CHANNEL_HEADER_H
+﻿#ifndef DRAW_CHANNEL_HEADER_H
 #define DRAW_CHANNEL_HEADER_H
 
 #include <QQuickPaintedItem>
@@ -45,7 +29,6 @@ signals:
     void vernierCreate();
     void vernierCreateComplete();
     void vernierMoveState(bool isMove,qint32 id);
-
     void isExitChanged();
 
 private slots:
@@ -60,8 +43,10 @@ private:
     quint32 m_lowLineTop=22;
     QColor m_vernierTypeColor[6];
     qint32 m_vernierMoveIndex=-1;
-    qint32 m_height=0;
-    qint32 m_width=0;
+    qint64 m_vernierMovePosition=0;
+    Qt::MouseButton m_currentButton;
+    qint32 m_height=0;//通道高度，只读
+    qint32 m_width=0;//通道高度，只读
     qint32 m_selectVernierIndex=0;
     QPoint m_mousePoint;
     bool m_isCreating=false;
@@ -75,10 +60,12 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
 
+    //以下为QML属性
 public:
     Q_INVOKABLE void init(QString sessionID);
     Q_INVOKABLE void setTheme(QString theme);
     Q_INVOKABLE void createVernier();
+    Q_INVOKABLE void vernierCancelMove();
 
     bool isExit() const;
     void setIsExit(bool newIsExit);
@@ -92,4 +79,4 @@ private:
     Q_PROPERTY(bool isExit READ isExit WRITE setIsExit NOTIFY isExitChanged)
 };
 
-#endif 
+#endif // DRAW_CHANNEL_HEADER_H

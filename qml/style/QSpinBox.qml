@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -75,6 +59,7 @@ Rectangle{
             right: showText.left
             rightMargin: 2
         }
+        font.pixelSize: 12
         readOnly: !editable
         enabled: !disable
         selectByMouse: true
@@ -122,6 +107,9 @@ Rectangle{
         Button {
             clip: true
             Image{
+                width: 9
+                height: 6
+                fillMode: Image.PreserveAspectFit
                 source: disable?"../../resource/icon/"+Config.tp+"/PullDownDisable.png":"../../resource/icon/"+Config.tp+"/PullDown.png"
                 rotation: 180
                 anchors{
@@ -156,6 +144,9 @@ Rectangle{
         Button {
             clip: true
             Image{
+                width: 9
+                height: 6
+                fillMode: Image.PreserveAspectFit
                 source: disable?"../../resource/icon/"+Config.tp+"/PullDownDisable.png":"../../resource/icon/"+Config.tp+"/PullDown.png"
                 anchors{
                     top: parent.top

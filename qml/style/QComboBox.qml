@@ -1,33 +1,20 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
 ComboBox {
     property alias backgroundRectangle: backRect
-    property var currentTextValue
+    property string currentTextValue: ""
     property var currentModelChildren
     property int popupMaxHeight: 30*8
     property bool showArrows: true
+    property bool autoSetCurrentIndex: true
     property bool wheelChanged: Setting.componentWheelChanged
     property bool disable: false
     property var modelCount: model.count
     property bool isError: false
+    property int maxTextWidth: 0
+    property int elide_: Text.ElideMiddle
 
     onDisableChanged: {
         if(disable)
@@ -35,9 +22,26 @@ ComboBox {
     }
 
     onModelCountChanged: {
-        if(currentIndex>=modelCount)
-            currentIndex=0;
-        refreshText();
+        if(autoSetCurrentIndex){
+            if(currentIndex>=modelCount)
+                currentIndex=modelCount===0?-1:0;
+            refreshText();
+        }else if(currentIndex>=0){
+            let tmp=model.get(currentIndex);
+            if(tmp.showText!==currentModelChildren.showText || tmp.cost!==currentModelChildren.cost){
+                let isSet=true;
+                if(currentIndex>0){
+                    tmp=model.get(currentIndex-1);
+                    if(tmp.showText===currentModelChildren.showText && tmp.cost===currentModelChildren.cost){
+                        isSet=false;
+                        currentIndex--;
+                    }
+                }
+                if(isSet)
+                    currentIndex=-1;
+            }
+
+        }
     }
 
     id: rootComboBox
@@ -50,11 +54,16 @@ ComboBox {
         height: 30
         width: rootComboBox.width
         contentItem: Text {
+            id: contentItemText
             text: showText?showText:""
-            elide: Text.ElideRight
+            elide: elide_
             color: rootComboBox.highlightedIndex === index ? "white" : Config.textColor
             verticalAlignment: Text.AlignVCenter
             font.pixelSize: 12
+            onContentWidthChanged: {
+                if(contentWidth+30>maxTextWidth)
+                    maxTextWidth=contentWidth+30;
+            }
         }
         background: Rectangle{
             anchors.fill: parent
@@ -65,6 +74,9 @@ ComboBox {
 
     indicator: Image{
         visible: showArrows
+        width: 9
+        height: 5
+        fillMode: Image.PreserveAspectFit
         anchors{
             verticalCenter: parent.verticalCenter
             right: parent.right
@@ -79,9 +91,13 @@ ComboBox {
         text: currentTextValue
         horizontalAlignment: showArrows?Text.AlignLeft:Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
+        elide: elide_
         color: disable ? Config.textDisabledColor:Config.textColor
         font.pixelSize: 12
+        onContentWidthChanged: {
+            if(contentWidth+30>maxTextWidth)
+                maxTextWidth=contentWidth+30;
+        }
     }
 
     onCurrentIndexChanged: refreshText();
@@ -96,6 +112,11 @@ ComboBox {
         y: rootComboBox.height;
         width: rootComboBox.width;
         height: contentItem.implicitHeight>popupMaxHeight?popupMaxHeight:contentItem.implicitHeight;
+        onHeightChanged: {
+            if(height!==(contentItem.implicitHeight>popupMaxHeight?popupMaxHeight:contentItem.implicitHeight) && height===0)
+                height=contentItem.implicitHeight>popupMaxHeight?popupMaxHeight:contentItem.implicitHeight;
+        }
+
         clip: true
         contentItem: ListView {
             clip: true;
@@ -132,7 +153,7 @@ ComboBox {
             id: showAnimation
             target: popup;
             properties: "height";
-            from: 0
+            from: 1
             to: contentItem.implicitHeight>popupMaxHeight?popupMaxHeight:contentItem.implicitHeight;
             duration: 100
         }
@@ -168,12 +189,18 @@ ComboBox {
         }else{
             if(currentIndex+1<modelCount)
                 currentIndex++;
+            else if(modelCount!==0 && currentIndex<0)
+                currentIndex=0;
         }
     }
 
     function refreshText(){
-        currentModelChildren=rootComboBox.model.get(rootComboBox.currentIndex);
-        if(currentModelChildren)
+        if(currentIndex<0){
+            currentTextValue="";
+            return;
+        }
+        currentModelChildren=model.get(currentIndex);
+        if(currentModelChildren && currentModelChildren.showText)
             currentTextValue=currentModelChildren.showText;
         else
             currentTextValue="";

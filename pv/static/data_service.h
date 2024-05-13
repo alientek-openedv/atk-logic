@@ -1,23 +1,8 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef DATASERVICE_H
+﻿#ifndef DATASERVICE_H
 #define DATASERVICE_H
 
 
+#include "pv/static/shared_memory_helper.h"
 #pragma once
 #include <QHash>
 #include <QString>
@@ -58,9 +43,14 @@ public:
     DecodeService* getDecodeServer();
 
 public:
-    qint32 m_channelCount=16;
-    QApplication* m_app=nullptr;
-    QQmlEngine* m_engine=nullptr;
+    qint32 m_channelCount=16;//全局通道数
+    QApplication* m_app=nullptr;//app全局
+    QQmlEngine* m_engine=nullptr;//全局窗口
+    SharedMemoryHelper m_shared;//全局共享内存
+    QVariantList m_log;         //全局日志列表
+    QMutex m_logLock;           //全局日志锁
+    QString m_tempDir;          //全局写出目录
+    QString m_downloadPath="http://47.111.11.73/ATK-Prod/ATK-Logic";//全局固件下载地址
 
 private:
     DataService();

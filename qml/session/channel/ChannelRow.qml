@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import QtGraphicalEffects 1.0
 import atk.qml.Controls 1.0
@@ -92,6 +76,7 @@ Component{
                                         var count=list_view.contentY,i=0;
                                         for(i=0;i<dataModel.count;i++)
                                         {
+                                            //纠正移位的通道
                                             if(list_view.itemAtIndex(i).y!==count){
                                                 list_view.itemAtIndex(i).y=count;
                                             }
@@ -109,6 +94,7 @@ Component{
                                         anchors.fill: parent
                                         drag.target: list_item_root
                                         cursorShape: Qt.OpenHandCursor
+                                        //防止被view窃取事件
                                         preventStealing: true
                                         propagateComposedEvents: true
 
@@ -143,6 +129,7 @@ Component{
                                             var i=0,count=0;
                                             var isSet=false;
                                             var itemY=list_item_root.y-list_view.contentY;
+                                            //0 item是定位item，不能移动
                                             if(index>0){
                                                 item=list_view.itemAtIndex(index-1);
                                                 targetY=item.y+item.height/2-list_view.contentY;
@@ -158,6 +145,8 @@ Component{
                                             if(index<dataModel.count-2 && !isSet){
                                                 item=list_view.itemAtIndex(index+1);
                                                 targetY=item.y+item.height/2-list_view.contentY;
+                                                //                console.log(itemY+","+mouse_area.mouseY+","+targetY+","+(itemY+mouse_area.mouseY>targetY)+","+
+                                                //                            list_view.y+","+list_view.contentY);
                                                 if(itemY+mouse_area.mouseY>targetY){
                                                     for(i=0;i<index+1;i++)
                                                     {
@@ -221,46 +210,103 @@ Component{
                                     imageEnterSource: imageSource
                                     imageDisableSource: imageSource
                                     onPressed: {
+                                        for(var i in sSettings.decodeJson){
+                                            if(sSettings.decodeJson[i]["decodeID"]===decode["decodeID"]){
+                                                switch(sSettings.decodeJson[i]["decodeJson"]["main"]["height"]){
+                                                case 2:
+                                                    decodeSetMenuPopup.selectIndex=12;
+                                                    break;
+                                                case 4:
+                                                    decodeSetMenuPopup.selectIndex=13;
+                                                    break;
+                                                case 8:
+                                                    decodeSetMenuPopup.selectIndex=14;
+                                                    break;
+                                                default:
+                                                    decodeSetMenuPopup.selectIndex=11;
+                                                }
+                                                break;
+                                            }
+                                        }
                                         decodeSetMenuPopup.lastCurrentIndex=-1;
                                         decodeSetMenuPopup.open()
                                     }
                                     onContainsMouseChanged: Signal.setCursor(containsMouse?Qt.PointingHandCursor:Qt.ArrowCursor);
                                 }
-
-                                Connections{
-                                    target: sConfig
-                                    function onIsRunChanged(){
-                                        decodeSetMenuPopup.close();
-                                    }
-                                }
-
                                 QMenuPopup{
+                                    property int selectIndex: 11
                                     id: decodeSetMenuPopup
                                     parent: setButton
                                     isTwoModel: true
                                     x: 0
                                     data: [{"showText":qsTr("编辑"),"shortcutKey":"","seleteType":0,"buttonIndex":0},
                                         {"showText":qsTr("显示行"),"shortcutKey":"->","seleteType":0,"buttonIndex":1},
-                                        {"showText":qsTr("删除"),"shortcutKey":"","seleteType":0,"buttonIndex":2}]
+                                        {"showText":qsTr("删除"),"shortcutKey":"","seleteType":0,"buttonIndex":2},
+                                        {"showText":"-","shortcutKey":"","seleteType":0,"buttonIndex":-1},
+                                        {"showText":qsTr("1X协议高度"),"shortcutKey":"","seleteType":selectIndex==11?2:1,"buttonIndex":11},
+                                        {"showText":qsTr("2X协议高度"),"shortcutKey":"","seleteType":selectIndex==12?2:1,"buttonIndex":12},
+                                        {"showText":qsTr("4X协议高度"),"shortcutKey":"","seleteType":selectIndex==13?2:1,"buttonIndex":13},
+                                        {"showText":qsTr("8X协议高度"),"shortcutKey":"","seleteType":selectIndex==14?2:1,"buttonIndex":14}]
                                     onSelect: {
-                                        if(index===0){
-                                            sSignal.editDecode(decode["decodeID"]);
-                                        }else if(index===1){
-                                            for(var i in sConfig.decodeJson){
-                                                if(sConfig.decodeJson[i]["decodeID"]===decode["decodeID"]){
-                                                    decodeSetShowRowPopup.decodeJson=sConfig.decodeJson[i]["decodeJson"];
-                                                    decodeSetShowRowPopup.open();
-                                                }
+                                        var json;
+                                        for(var i in sSettings.decodeJson){
+                                            if(sSettings.decodeJson[i]["decodeID"]===decode["decodeID"]){
+                                                json=sSettings.decodeJson[i]["decodeJson"];
+                                                break;
                                             }
-                                        }else if(index===2){
-                                            sSignal.removeDecode(decode["decodeID"],0);
+                                        }
+                                        let decodeName=json["main"]["first"];
+                                        if(json["main"]["second"] && json["main"]["second"].length>0)
+                                            decodeName=json["main"]["second"][json["main"]["second"].length-1];
+                                        switch(index){
+                                        case 0:
+                                            sSignal.editDecode(decode["decodeID"]);
+                                            break;
+                                        case 1:
+                                            decodeSetShowRowPopup.decodeJson=json;
+                                            decodeSetShowRowPopup.decodeName=decodeName;
+                                            decodeSetShowRowPopup.open();
+                                            break;
+                                        case 2:
+                                            removeDecodeTimer.decodeName=decode["decodeID"];
+                                            removeDecodeTimer.start();
+                                            break;
+                                        case 11:
+                                            selectIndex=11;
+                                            json["main"]["height"]=1;
+                                            Signal.setDecodeConfig(decodeName, "height", 1);
+                                            sSignal.resetDecodeJson(json, json["main"]["decodeID"]);
+                                            break;
+                                        case 12:
+                                            selectIndex=12;
+                                            json["main"]["height"]=2;
+                                            Signal.setDecodeConfig(decodeName, "height", 2);
+                                            sSignal.resetDecodeJson(json, json["main"]["decodeID"]);
+                                            break;
+                                        case 13:
+                                            selectIndex=13;
+                                            json["main"]["height"]=4;
+                                            Signal.setDecodeConfig(decodeName, "height", 4);
+                                            sSignal.resetDecodeJson(json, json["main"]["decodeID"]);
+                                            break;
+                                        case 14:
+                                            selectIndex=14;
+                                            json["main"]["height"]=8;
+                                            Signal.setDecodeConfig(decodeName, "height", 8);
+                                            sSignal.resetDecodeJson(json, json["main"]["decodeID"]);
+                                            break;
                                         }
                                     }
                                     onContainsTwo: {
                                         if(containsMouse){
-                                            for(var i in sConfig.decodeJson){
-                                                if(sConfig.decodeJson[i]["decodeID"]===decode["decodeID"]){
-                                                    decodeSetShowRowPopup.decodeJson=sConfig.decodeJson[i]["decodeJson"];
+                                            for(var i in sSettings.decodeJson){
+                                                if(sSettings.decodeJson[i]["decodeID"]===decode["decodeID"]){
+                                                    var json=sSettings.decodeJson[i]["decodeJson"];
+                                                    let decodeName=json["main"]["first"];
+                                                    if(json["main"]["second"] && json["main"]["second"].length>0)
+                                                        decodeName=json["main"]["second"][json["main"]["second"].length-1];
+                                                    decodeSetShowRowPopup.decodeJson=json;
+                                                    decodeSetShowRowPopup.decodeName=decodeName;
                                                     decodeSetShowRowPopup.open();
                                                 }
                                             }
@@ -285,6 +331,8 @@ Component{
                                     }
                                     width: 12
                                     height: 12
+                                    imageWidth: 6
+                                    imageHeight: 12
                                     imageSource: "resource/icon/Fold.png"
                                     imageEnterSource: "resource/icon/Fold.png"
                                     rotation: isExpand?90:0
@@ -303,14 +351,15 @@ Component{
 
                         Connections{
                             target: sSignal
+
+                            function onCloseAllPopup(){
+                                decodeSetMenuPopup.close();
+                            }
+
                             function onChannelRefresh(channelID_)
                             {
                                 if(channelID_<0&&!sConfig.isExit)
                                     drawHeaderChannel.update();
-                            }
-
-                            function onSetMouseMeasure(isCheck){
-                                drawHeaderChannel.isMouseMeasure=isCheck;
                             }
 
                             function onVernierCreate(state){
@@ -323,6 +372,11 @@ Component{
                             function onSendChannelY(channelID_,type,y){
                                 if(typeof(channelID_)==="string" && decode["decodeID"]===channelID_ && type===3)
                                     drawHeaderChannel.adsorbChannelID=y;
+                            }
+
+                            function onCrossChannelMeasureState(isStop){
+                                drawHeaderChannel.adsorbChannelID=-1;
+                                drawHeaderChannel.crossChannelMeasureStateModel(isStop);
                             }
                         }
 
@@ -343,6 +397,7 @@ Component{
                             width: parent.width-headerSideBar.width
                             height: headerSideBar.height
                             showDataColor: Config.textColor
+                            isMouseMeasure: Setting.isMouseMeasure
                             Component.onCompleted: {
                                 drawHeaderChannel.decodeInit(sessionID_, decode["decodeID"])
                                 setTheme(Config.tp);
@@ -358,6 +413,10 @@ Component{
                                     sSignal.setChannelCursor(Qt.ArrowCursor);
                             }
                             onCloseVernierPopup: sSignal.closeVernierPopup();
+                            onMeasureSelectChanged: {
+                                sSignal.measureRefreshShow();
+                                sSignal.channelRefresh(-1);
+                            }
                             onVernierDataChanged: {
                                 sSignal.vernierDataChanged(vernierID);
                                 vernierListModel.refresh(vernierID);
@@ -389,6 +448,16 @@ Component{
                                 if(sConfig.isRun && !sConfig.isBuffer && sConfig.isLiveFollowingPopupShow)
                                     sSignal.setLiveFollowing(isEnable,true);
                             }
+                            onVernierAppend: {
+                                vernierListModel.append();
+                                sSignal.channelRefresh(-1);
+                            }
+                            onCrossChannelMeasureState: sSignal.crossChannelMeasureState(isStop);
+                            onSendCrossChannelMeasurePosition: {
+                                sSignal.sendCrossChannelMeasurePosition(type, x, y, mouseY, position, isHit);
+                                sSignal.getChannelY(decode["decodeID"], 3+type, 0);
+                            }
+                            onStopXWheel: sSignal.stopXWheel();
                         }
                         Rectangle{
                             visible: isExpand

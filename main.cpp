@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include <QApplication>
+﻿#include <QApplication>
 #include <QQmlApplicationEngine>
 
 #include <QQmlContext>
@@ -43,14 +27,32 @@
 #include "./pv/model/test_file_table_model.h"
 #include "./pv/model/decode_list_model.h"
 #include "./pv/model/search_table_model.h"
+#include <pv/static/menustyle.h>
 
 #pragma GCC optimize(3,"Ofast","inline")
 
+
+////程式异常捕获
+//long __stdcall callback(_EXCEPTION_POINTERS* pException)
+//{
+//    int code =  pException->ExceptionRecord->ExceptionCode;
+//    int flags = pException->ExceptionRecord->ExceptionFlags;
+//    LogHelp::write(QString("程序异常：Code=%1， Flags=%2").arg(QString::number(code),QString::number(flags)));
+//    return EXCEPTION_EXECUTE_HANDLER;
+//}
+
+DataService* g_dataService;
 
 int log_callback(void *cb_data, int loglevel,
                  const char *format, va_list args){
     static char buffer[2048];
     vsnprintf(buffer,2048,format,args);
+    if(g_dataService!=nullptr){
+        g_dataService->m_logLock.lock();
+        g_dataService->m_log.append(QDateTime::currentDateTime().toString("hh:mm:ss.zzz: ")+QString(buffer)+"\n");
+        g_dataService->m_logLock.unlock();
+    }
+
     LogHelp::write(QString(buffer));
     return 0;
 }
@@ -58,10 +60,12 @@ int log_callback(void *cb_data, int loglevel,
 int main(int argc, char* argv[])
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);//启用系统百分比缩放
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+    QApplication::setAttribute(Qt::AA_Use96Dpi);
+
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
-    QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::RoundPreferFloor);
+    QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::Round);
 #endif
 #endif
     QApplication app(argc, argv);
@@ -69,25 +73,22 @@ int main(int argc, char* argv[])
     app.setOrganizationName("ALIENTEK");
     app.setOrganizationDomain("www.alientek.com");
     app.setApplicationName("ATK-LogicView");
-    
+    app.setStyle(new MenuStyle());
+    QString tempDir=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+#if defined (QT_NO_DEBUG) && defined (Q_CC_MSVC)
+    QBreakpadInstance.setDumpPath(tempDir+"/crash");
+#endif
+    //载入全局字体
     QFont font = app.font();
-    bool isSetFont=false;
-    QFontDatabase database;
-    for (auto &i : database.families()) {
-        if(i==QStringLiteral("微软雅黑")){
-            font.setFamily(QStringLiteral("微软雅黑"));
-            isSetFont=true;
-            break;
-        }
-    }
-    if(!isSetFont){
-        int fontId = QFontDatabase::addApplicationFont(":/resource/OPPOSans-M.ttf");
-        QStringList fontFamilies = QFontDatabase::applicationFontFamilies(fontId);
-        font.setFamily(fontFamilies.at(0));
-    }
+    int fontId = QFontDatabase::addApplicationFont(":/resource/SourceHanSansCN-Regular.otf");
+    QFontDatabase::addApplicationFont(":/resource/OPPOSans-M.ttf");
+    QStringList fontFamilies = QFontDatabase::applicationFontFamilies(fontId);
+    font.setHintingPreference(QFont::PreferVerticalHinting);
+    font.setStyleHint(QFont::System, QFont::NoSubpixelAntialias);
+    font.setFamily(fontFamilies.at(0));
     app.setFont(font);
 
-    
+    //设置中文编码
 #if (QT_VERSION <= QT_VERSION_CHECK(5,0,0))
 #if _MSC_VER
     QTextCodec *codec = QTextCodec::codecForName("GBK");
@@ -106,16 +107,16 @@ int main(int argc, char* argv[])
 #endif
 #endif
 
-    
+    //导入model
     qmlRegisterType<measureTreeViewModel>("atk.qml.Model", 1, 0, "MeasureTreeViewModel");
     qmlRegisterType<VernierListModel>("atk.qml.Model", 1, 0, "VernierListModel");
     qmlRegisterType<DecodeTableModel>("atk.qml.Model", 1, 0, "DecodeTableModel");
     qmlRegisterType<TestFileTableModel>("atk.qml.Model", 1, 0, "TestFileTableModel");
     qmlRegisterType<DecodeListModel>("atk.qml.Model", 1, 0, "DecodeListModel");
     qmlRegisterType<SearchTableModel>("atk.qml.Model", 1, 0, "SearchTableModel");
-    
+    //导入事件过滤器
     qmlRegisterType<ShortcutListener>("atk.qml.App", 1, 0, "ShortcutListener");
-    
+    //导入控件
     qmlRegisterType<Setting>("atk.qml.Controls", 1, 0, "QSetting");
     qmlRegisterType<FpsItem>("atk.qml.Controls", 1, 0, "FpsItem");
     qmlRegisterType<FramelessWindow>("atk.qml.Controls", 1, 0, "FramelessWindow");
@@ -128,8 +129,8 @@ int main(int argc, char* argv[])
     qmlRegisterType<DrawChannelHeader>("atk.qml.Controls", 1, 0, "DrawChannelHeader");
     QQuickWindow::setSceneGraphBackend(QSGRendererInterface::Software);
     QQmlApplicationEngine engine;
-    qDebug()<<QDir::tempPath()+"/ATK-Logic";
-    engine.rootContext()->setContextProperty("tempDir",QDir::tempPath()+"/ATK-Logic");
+    qDebug()<<tempDir;
+    engine.rootContext()->setContextProperty("tempDir", tempDir);
     engine.rootContext()->setContextProperty("clipboard",new Clipboard());
     const QUrl url(QStringLiteral("qrc:/qml/main.qml"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
@@ -143,6 +144,7 @@ int main(int argc, char* argv[])
     DataService* dataService=DataService::getInstance();
     dataService->m_app=&app;
     dataService->m_engine=&engine;
+    g_dataService=dataService;
     engine.rootContext()->setContextProperty("maxChannelNum", dataService->m_channelCount);
     engine.rootContext()->setContextProperty("app_VERSION", APP_VERSION);
     engine.rootContext()->setContextProperty("app_VERSION_NUM", APP_VERSION_NUM);
@@ -151,13 +153,18 @@ int main(int argc, char* argv[])
     engine.addImportPath(QApplication::applicationDirPath()+"/../Resources/qml/");
 #endif
 
-    
-    LogHelp::init(QDir::tempPath()+"/ATK-Logic/log");
+    //初始化日志
+    LogHelp::init(tempDir+"/log");
 
-    
+    //输出系统信息
     {
         QString tmp="AppVersion：";
         tmp+=APP_VERSION;
+#ifdef _WIN64
+        tmp+=" x64";
+#else
+        tmp+=" x86";
+#endif
         LogHelp::write(tmp);
 
         tmp=QObject::tr("系统版本：")+QSysInfo::productType()+" "+QSysInfo::productVersion()+" - "+QSysInfo::kernelType()+" "+QSysInfo::kernelVersion();
@@ -171,7 +178,7 @@ int main(int argc, char* argv[])
 
 #ifdef Q_OS_WIN
         QSettings *CPU = new QSettings("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",QSettings::NativeFormat);
-        tmp="CPU："+CPU->value("ProcessorNameString").toString();
+        tmp="CPU："+CPU->value("ProcessorNameString").toString().trimmed();
         delete CPU;
         LogHelp::write(tmp);
 
@@ -183,22 +190,15 @@ int main(int argc, char* argv[])
         tmp=QObject::tr("可用的物理内存：")+QString::number(statex.ullAvailPhys*1.0/(1024*1024*1024))+" GB";
         LogHelp::write(tmp);
 #endif
-
-        QTcpSocket tcpClient;
-        tcpClient.abort();
-        tcpClient.connectToHost("www.baidu.com", 80);
-        tmp=QObject::tr("互联网连接：");
-        tmp+=tcpClient.waitForConnected(300)?"true":"false";
-        LogHelp::write(tmp);
     }
 
-    
+    //设置解码器回调函数
     atk_log_callback_set(log_callback,nullptr);
 
-    
+    //设置解码器回调等级
     atk_log_loglevel_set(ATK_LOG_WARN);
 
-    
+    //QApplication::applicationDirPath().toStdString().c_str()
     qint32 ret=0;
     if (atk_decoder_init(QApplication::applicationDirPath().toStdString().c_str()) == ATK_OK){
         if(atk_decoder_load_all()!=ATK_OK)
@@ -206,15 +206,24 @@ int main(int argc, char* argv[])
     }else
         ret=1;
 
+#ifdef Q_OS_WIN
+    engine.rootContext()->setContextProperty("windowType", 1);
+#endif
+#ifdef Q_OS_LINUX
+    engine.rootContext()->setContextProperty("windowType", 2);
+#endif
+#ifdef Q_OS_MACX
+    engine.rootContext()->setContextProperty("windowType", 3);
+#endif
     engine.rootContext()->setContextProperty("decode_init_code", ret);
+    engine.rootContext()->setContextProperty("setRoot", 0);
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app, [&](){
         DataService* dataService=DataService::getInstance();
         dataService->setRoot(engine.rootObjects().at(0));
+        engine.rootContext()->setContextProperty("setRoot", 1);
     });
     engine.load(url);
-#if defined (QT_NO_DEBUG) && defined (Q_CC_MSVC)
-    QBreakpadInstance.setDumpPath(QDir::tempPath()+"/ATK-Logic/crash");
-#endif
+    //    SetUnhandledExceptionFilter(callback);
     return app.exec();
 }

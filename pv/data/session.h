@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef SESSION_H
+﻿#ifndef SESSION_H
 #define SESSION_H
 
 #pragma once
@@ -39,35 +23,36 @@ enum class SessionType{
 
 struct MeasureDataStr
 {
-    QString start;
-    QString startDetail;
-    QString end;
-    QString endDetail;
-    QString time;
-    QString timeDetail;
-    QString minFreq;
-    QString minFreqDetail;
-    QString maxFreq;
-    QString maxFreqDetail;
+    QString start;//起始位置
+    QString startDetail;//起始位置详细
+    QString end;//结束位置
+    QString endDetail;//结束位置详细
+    QString time;//时间
+    QString timeDetail;//时间详细
+    QString minFreq;//最小频率
+    QString minFreqDetail;//最小频率详细
+    QString maxFreq;//最大频率
+    QString maxFreqDetail;//最大频率详细
 };
 
 struct MeasureData
 {
-    qint32 id;
-    QString name;
-    qint32 channelID;
-    qint64 start;
-    qint64 end;
-    qint32 rising;
-    qint32 falling;
-    QColor dataColor;
-    MeasureDataStr str;
-    QString note;
+    qint32 id;//ID
+    QString name;//名称
+    qint32 channelID;//通道ID
+    qint64 start;//起始位置
+    qint64 end;//结束位置
+    qint32 rising;//上升沿
+    qint32 falling;//下降沿
+    QColor dataColor;//显示颜色
+    MeasureDataStr str;//显示文本
+    //以下为控制属性
+    QString note;//注释
     qint32 offset;
     bool isAutoOffset=true;
-    bool isSelect;
-    bool isCalc=false;
-    bool isRefreshCalc=false;
+    bool isSelect;//是否选中
+    bool isCalc=false;//是否计算中
+    bool isRefreshCalc=false;//是否重复再次计算
 };
 
 struct VernierDataBusy{
@@ -92,7 +77,9 @@ struct VernierData
 enum FileType{
     NotFile,
     CSVFile,
-    SourceFile
+    SourceFile,
+    BinNsFile,
+    BinSampleFile
 };
 
 class Session : public QObject
@@ -101,7 +88,8 @@ class Session : public QObject
 public:
     Session(QString name,QString id,qint32 channelCount,SessionType type,QString path,DataService* parent);
     ~Session();
-    void LoadFile(QString path);
+    void initFile();
+    void LoadFile(QString path, bool isSendDecode);
     void SaveFile(QString path, QString sessionName, FileType type);
     bool OrderStart(QByteArray dataBytes,QByteArray setBytes, double second, quint64 samplingDepth, quint64 triggerSamplingDepth,
                     qint64 samplingFrequency, qint32 type, QVector<qint8> channelIDList, bool isBuffer, bool isRLE);
@@ -134,7 +122,7 @@ public slots:
     void onAppendVernier(qint32 vernierIndex);
 
 signals:
-    void drawUpdate(bool isPoll=false);
+    void drawUpdate(qint32 isPoll=-1);//ispoll是区分滚动条数值刷新
     void refreshZoom(qint32 state);
     void sendThreadPara(USBControl* usb, Segment* segment, SessionConfig* config, double second, void* channelIDList, bool isBuffer, bool isRLE);
     void sendSaveFileThreadPara(QString filePath, Segment* segment, QVector<QString> channelsName);
@@ -143,9 +131,10 @@ signals:
                                       QHash<QString,DecodeController*>* decodes);
     void sendLoadSourceFileThreadPara(QString filePath, Segment* segment, SessionConfig* config,
                                       QVector<MeasureData>* measureList, QVector<VernierData>* vernierList, QHash<QString,DecodeController*>* decodes,
-                                      QVector<QString>* channelsNames);
-    void sendSaveDecodeTableThreadPara(QString filePath, qint32 multiply, QVector<DecodeRowData>* data, QVector<QMap<QString,QJsonObject>>* rowType,
+                                      QVector<QString>* channelsNames, bool isSendDecode);
+    void sendSaveDecodeTableThreadPara(QString filePath, qint32 multiply, QList<DecodeRowData>* data, QList<QMap<QString,QJsonObject>>* rowType,
                                        QVector<bool>* saveList);
+    void sendSaveBinFileThreadPara(QString filePath, Segment *segment, qint32 type, QString channels);
     void sendCalcMeasureData(qint32 measureID, qint32 channelID, QVector<MeasureData>* measure, Segment* segment);
     void sendGlitchRemovalThreadPara(Segment* segment);
     void measureDataChanged();
@@ -157,7 +146,7 @@ public:
     ThreadWork* m_workThread;
     SessionConfig* m_config;
     Segment* m_segment=nullptr;
-    Segment* m_segmentRecode=nullptr;
+    Segment* m_segmentRecode=nullptr;//毛刺过滤才会用这记录原始数据
     QVector<MeasureData> m_measure;
     QVector<VernierData> m_vernier;
     qint32 m_measureIndex=0;
@@ -168,9 +157,9 @@ public:
     QVector<QString> m_channelsName;
     QJsonArray m_GlitchRemovalJsonArray;
 
-    
-    QVector<DecodeRowData>* m_tableData=nullptr;
-    QVector<QMap<QString,QJsonObject>>* m_tableRowType=nullptr;
+    //保存协议表格
+    QList<DecodeRowData>* m_tableData=nullptr;
+    QList<QMap<QString,QJsonObject>>* m_tableRowType=nullptr;
     QVector<bool> m_tableSaveIndex;
     qint32 m_tableMultiply;
 
@@ -182,4 +171,4 @@ private:
     QString m_filePath;
 };
 
-#endif 
+#endif // SESSION_H

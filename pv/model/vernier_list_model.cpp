@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "vernier_list_model.h"
+﻿#include "vernier_list_model.h"
 
 VernierListModel::VernierListModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -81,7 +65,6 @@ void VernierListModel::remove(int vernierID)
         set(0,"visible_",false);
         set(0,"note","");
         set(0,"dataColor","#26A3D9");
-        emit countChanged();
     }
 }
 
@@ -239,11 +222,20 @@ void VernierListModel::set(int vernierID, QString key, QVariant value)
     }
 }
 
-int VernierListModel::count()
+qint32 VernierListModel::count()
 {
     if (m_vernier==nullptr)
         return 0;
     return m_count;
+}
+
+qint32 VernierListModel::getSelectID()
+{
+    for(qint32 j=0;j<m_vernier->count();j++){
+        if(m_vernier->at(j).isSelect)
+            return m_vernier->at(j).id;
+    }
+    return -1;
 }
 
 void VernierListModel::refreshAt(int row)

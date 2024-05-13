@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef VERNIER_LIST_MODEL_H
+﻿#ifndef VERNIER_LIST_MODEL_H
 #define VERNIER_LIST_MODEL_H
 
 #include <QAbstractListModel>
@@ -37,12 +21,16 @@ public:
     Q_INVOKABLE QVariantMap get(int index);
     Q_INVOKABLE QVariantMap getAt(int vernierID);
     Q_INVOKABLE void set(int vernierID, QString key, QVariant value);
-    Q_INVOKABLE int count();
+    Q_INVOKABLE qint32 count();
+    Q_INVOKABLE qint32 getSelectID();
 
     // Basic functionality:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QHash<int, QByteArray> roleNames() const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+
+
+    Q_PROPERTY(qint32 count_ READ count NOTIFY countChanged)
 
 signals:
     void closePopup();

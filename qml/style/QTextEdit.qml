@@ -1,26 +1,11 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import "../config"
 
 Flickable {
     property string note: qsTr("注释")
     property color noteColor: Config.textDisabledColor
     property color textColor: Config.textColor
+    property bool canSelect: false
     property alias fontSize: noteTextEdit.font.pixelSize
     property alias showText: noteTextEdit.text
     property alias readOnly: noteTextEdit.readOnly
@@ -53,6 +38,8 @@ Flickable {
         width: parent.width
         height: paintedHeight
         color: textColor
+        selectByMouse: canSelect
+        selectionColor: Config.mouseCheckColor
         textFormat: TextEdit.PlainText
         wrapMode: TextEdit.WordWrap
         onCursorRectangleChanged: flick.ensureVisible(cursorRectangle)

@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "usb_control.h"
+﻿#include "usb_control.h"
 #include <QFile>
 
 #define TO_MCU_EP    0x02
@@ -59,6 +43,7 @@ bool USBControl::Init(libusb_device* dev, libusb_context* context, qint32 channe
         return true;
     DeInit();
     m_ChannelCount=channelCount;
+    //初始化通讯
     _m_logic->port = port;
     _m_logic->dev = dev;
     _m_logic->context = context;
@@ -77,7 +62,9 @@ bool USBControl::Init(libusb_device* dev, libusb_context* context, qint32 channe
         _m_logic->usb_loop->start(QThread::HighestPriority);
     }else
         goto Fail;
+
     _m_logic->flag.init=1;
+    //初始化写入结构体
     struct libusb_transfer* p;
     for (int i = 0; i < WRITE_TRANSFER_LENGTH; i++) {
         p = libusb_alloc_transfer(0);
@@ -85,8 +72,10 @@ bool USBControl::Init(libusb_device* dev, libusb_context* context, qint32 channe
             goto Fail;
         _m_dataToDevice.transfer[i] = p;
     }
+
+    //初始化读取结构体
     _m_dataToPC.singleBuffer=new quint8[2048];
-    _m_dataToPC.len = READ_TRANSFER_BUFFER_SIZE;
+    _m_dataToPC.len = READ_TRANSFER_BUFFER_SIZE;//32K缓存
     for (int i = 0; i < READ_TRANSFER_LENGTH; i++) {
         p = libusb_alloc_transfer(0);
         if (p == NULL)
@@ -132,26 +121,18 @@ static void LIBUSB_CALL transfer_write_cb(struct libusb_transfer *transfer)
 bool USBControl::Write(quint8* data, qint32 len) {
     if (!_m_isInit||m_NoDevice)
         return false;
-    len += 7;
+    int offset=8;//0x00偏移
+    len += 7 + offset;//加上指令头、尾、CRC32 7字节
     quint8* pBuffer = new quint8[len];
     memset(pBuffer, 0, len);
-    len -= 7;
+    len -= 7 + offset;//计算完成后还原
     quint32 CRC32 = gCRC32(data, len);
-    memset(pBuffer, 0x0A, 1);
-    memcpy(pBuffer + 1, data, len);
-    memset(pBuffer + 1 + len, 0x0B, 1);
-    memcpy(pBuffer + 2 + len, &CRC32, sizeof(CRC32));
-    QString t="";
-    for(qint32 i=0;i<len + 7;i++){
-        QString byteStr;
-        byteStr = QString::number(*(pBuffer+i),16);
-        if(byteStr.length() == 1)
-            byteStr="0x0"+byteStr;
-        else
-            byteStr="0x"+ byteStr;
-        t+=byteStr+",";
-    }
-    bool ret=SendToDevice(pBuffer, len + 7);
+    memset(pBuffer + offset, 0x0A, 1);//指令头
+    memcpy(pBuffer + offset + 1, data, len);//数据
+    memset(pBuffer + offset + 1 + len, 0x0B, 1);//指令尾
+    memcpy(pBuffer + offset + 2 + len, &CRC32, sizeof(CRC32));//CRC32
+//    showHex(pBuffer, len + offset + 7);
+    bool ret=SendToDevice(pBuffer, len + offset + 7);
     delete[] pBuffer;
     return ret;
 }
@@ -159,6 +140,9 @@ bool USBControl::Write(quint8* data, qint32 len) {
 static void LIBUSB_CALL transfer_read_cb(struct libusb_transfer* transfer)
 {
     DataToPC* m = (DataToPC*)transfer->user_data;
+    //如果数据填不满缓存区，还是会报超时，这里判定还是有数据
+    //    if(transfer->actual_length>0)
+    //        qDebug()<<"transfer->actual_length:"<<transfer->actual_length;
     if(transfer->status == LIBUSB_TRANSFER_TIMED_OUT && transfer->actual_length >0 && transfer->length>0)
         goto transferPush;
     if (transfer->status != LIBUSB_TRANSFER_COMPLETED && transfer->status != LIBUSB_TRANSFER_TIMED_OUT) {
@@ -226,11 +210,16 @@ bool USBControl::Read(Data_* pData, qint32 iCount,qint32 timeOut, qint32 maxTran
             sendCount_++;
             const int res = libusb_submit_transfer(_m_dataToPC.transfer[i]);
             if (res != LIBUSB_SUCCESS) {
-                LogHelp::write("读取USB数据失败！");
+                LogHelp::write("读取USB数据失败！错误代码："+QString::number(res));
                 throw "error";
+                //qDebug("TestToPC submit error:%d\r\n", res);
             }
         }
-    } catch (...) {
+    } catch (std::exception e) {
+        _m_dataToPC.flag.error = true;
+        qDebug()<<"读取USB数据失败！！！错误原因："<<e.what();
+        return false;
+    } catch(...){
         _m_dataToPC.flag.error = true;
         qDebug()<<"读取USB数据失败！！！";
         return false;
@@ -254,6 +243,20 @@ bool USBControl::Read(Data_* pData, qint32 iCount,qint32 timeOut, qint32 maxTran
             lsBufferOK.push_back(ok);
             bufferlen+=ok.length;
         }
+
+        //        QString s;
+        //        s=s.asprintf("%#lx", ok.transfer);
+        //        if(s=="0xbaadf00d" || s.toLongLong(nullptr,16)<10000)
+        //        {
+        //            qDebug()<<"continue:"<<s;
+        //            errorCount++;
+        //            if(errorCount==4)
+        //            {
+        //                qDebug()<<"error_continue_break";
+        //                break;
+        //            }
+        //            continue;
+        //        }
         if(sendCount_<iCount||(iCount<=0&&sendCount_<200))
         {
             if(ok.length<=0)
@@ -263,10 +266,14 @@ bool USBControl::Read(Data_* pData, qint32 iCount,qint32 timeOut, qint32 maxTran
                 const int res = libusb_submit_transfer(ok.transfer);
                 if (res != LIBUSB_SUCCESS)
                 {
-                    LogHelp::write("读取USB数据失败！！");
+                    LogHelp::write("读取USB数据失败！！错误代码："+QString::number(res));
                     throw "error";
                 }
-            } catch (...) {
+            } catch (std::exception e) {
+                _m_dataToPC.flag.error = true;
+                qDebug()<<"读取失败！！！错误原因："<<e.what();
+                break;
+            } catch(...){
                 _m_dataToPC.flag.error = true;
                 qDebug()<<"读取失败！！！";
                 break;
@@ -292,7 +299,6 @@ bool USBControl::Read(Data_* pData, qint32 iCount,qint32 timeOut, qint32 maxTran
         if(_m_dataToPC.flag.error==LIBUSB_TRANSFER_NO_DEVICE)
             m_NoDevice=true;
         LogHelp::write("ReadError");
-        qDebug()<<"ReadError";
     }
     return pData->len != 0;
 }
@@ -350,8 +356,9 @@ bool USBControl::ReadSingle(Data_ *pData)
         sendCount_++;
         const int res = libusb_submit_transfer(_m_dataToPC.transfer[0]);
         if (res != LIBUSB_SUCCESS) {
-            LogHelp::write("读取USB数据失败！");
+            LogHelp::write("读取USB数据失败！错误代码："+QString::number(res));
             throw "error";
+            //qDebug("TestToPC submit error:%d\r\n", res);
         }
     } catch (...) {
         _m_dataToPC.flag.error = true;
@@ -386,7 +393,7 @@ bool USBControl::ReadSingle(Data_ *pData)
                 const int res = libusb_submit_transfer(ok.transfer);
                 if (res != LIBUSB_SUCCESS)
                 {
-                    LogHelp::write("读取USB数据失败！！");
+                    LogHelp::write("读取USB数据失败！！错误代码："+QString::number(res));
                     throw "error";
                 }
             } catch (...) {
@@ -415,7 +422,6 @@ bool USBControl::ReadSingle(Data_ *pData)
         if(_m_dataToPC.flag.error==LIBUSB_TRANSFER_NO_DEVICE)
             m_NoDevice=true;
         LogHelp::write("ReadError");
-        qDebug()<<"ReadError";
     }
     return pData->len != 0;
 }
@@ -452,6 +458,16 @@ bool USBControl::Write(quint8 code, quint8* data, qint32 len, bool isWaitReply) 
         memcpy(newCode + 2, data, len - 2);
     m_lock.lock();
     bool _init=Write(newCode, len);
+    //qDebug()<<"sendcode:"<<code<<_init;
+    if(isWaitReply)
+    {
+        //        while (true) {
+        //            if(_init&&WaitReply(code))
+        //                break;
+        //            _init=Write(newCode, len);
+        //            //qDebug()<<"sendcode:"<<code<<_init;
+        //        }
+    }
     delete[] newCode;
     m_lock.unlock();
     return _init;
@@ -499,7 +515,7 @@ bool USBControl::SendToDevice(quint8 *data, qint64 len)
             delete[] _m_dataToDevice.buf[_m_dataToDevice.bufIndex];
         _m_dataToDevice.buf[_m_dataToDevice.bufIndex] = new quint8[ullNewLen];
         memset(pBuffer, 0, ullNewLen);
-        memcpy(pBuffer, data, len);
+        memcpy(pBuffer, data, len);//数据
         libusb_fill_bulk_transfer(_m_dataToDevice.transfer[_m_dataToDevice.bufIndex],
                 _m_logic->device_handle,
                 _m_logic->to_mcu_ep,
@@ -508,8 +524,18 @@ bool USBControl::SendToDevice(quint8 *data, qint64 len)
                 transfer_write_cb,
                 &_m_dataToDevice,
                 100);
-        
+        //    printf_buf((uint16_t*)pBuffer,1024);
         logic_analyzer_convert_to_device(pBuffer, _m_dataToDevice.buf[_m_dataToDevice.bufIndex], ullNewLen);
+        //    QFile file("a.txt");
+        //    if(file.open(QIODevice::WriteOnly  |QIODevice::Append)){
+        //        file.write("\r\n\r\n\r\naa[]={\r\n");
+        //        for(int i =0; i < 2048; i++){
+        //            if(i % 16 == 0)
+        //                file.write("\r\n");
+        //            file.write(QString().sprintf("0x%.2x,", _m_dataToDevice.buf[_m_dataToDevice.bufIndex][i]).toUtf8());
+        //        }
+        //        file.close();
+        //    }
         res = libusb_submit_transfer(_m_dataToDevice.transfer[_m_dataToDevice.bufIndex]);
         _m_dataToDevice.bufIndex++;
         if (_m_dataToDevice.bufIndex == WRITE_TRANSFER_LENGTH)
@@ -548,46 +574,46 @@ bool USBControl::WaitHardwareUpdate(quint8 code)
     return false;
 }
 
+//bool USBControl::WaitReply(quint8 code)
+//{
+//    qint32 count=0;
+//    qint32 sleepNum=50;
+//    while (true) {
+//        if(m_lastData!=nullptr)
+//        {
+//            if(m_lastData->buf)
+//                delete[] m_lastData->buf;
+//            memset(m_lastData,0,sizeof(Data_));
+//        }else
+//            m_lastData=new Data_();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//        if(Read(m_lastData,1))
+//        {
+//            //qDebug()<<m_lastData->len<<m_lastData->buf;
+//            if(m_lastData->len>0&&m_lastData->buf){
+//                Analysis analusis(m_lastData->buf,m_lastData->len);
+//                AnalysisData data=analusis.getNextData();
+//                while(data.order!=-1){
+//                    if(data.order==4){
+//                        //qDebug()<<"waitcode:"<<code<<"ok";
+//                        if(*(data.pData+2)==code)
+//                        {
+//                            delete data.pData;
+//                            return true;
+//                        }
+//                    }
+//                    delete data.pData;
+//                    data=analusis.getNextData();
+//                }
+//            }
+//        }
+//        QThread::msleep(50);
+//        count+=sleepNum;
+//        if(count>=200)
+//            break;
+//    }
+//    return false;
+//}
 
 bool USBControl::GetDeviceData(bool isWaitReply) {
     return Write(0x10, NULL, 0, isWaitReply);

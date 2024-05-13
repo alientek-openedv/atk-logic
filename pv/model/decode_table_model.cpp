@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "decode_table_model.h"
+﻿#include "decode_table_model.h"
 
 DecodeTableModel::DecodeTableModel(QObject *parent)
     : QAbstractTableModel(parent)
@@ -76,6 +60,7 @@ QJsonArray DecodeTableModel::initShow(QString decodeID)
 
 void DecodeTableModel::appendShow(QString rowID)
 {
+    setStop(false);
     if(!m_showRowList.contains(rowID))
     {
         m_showRowList.append(rowID);
@@ -102,7 +87,7 @@ void DecodeTableModel::appendShow(QString rowID)
                     if(isAdd)
                         m_sortPositionList.append(SortShow(i,ii));
                     resetSort();
-                    return;
+                    return;//这里会强制返回，下面不要放代码
                 }
             }
             m_decode->m_rowList[i]->mutex.unlock();
@@ -132,7 +117,7 @@ void DecodeTableModel::removeShow(QString rowID)
                         }
                     }
                     resetSort();
-                    return;
+                    return;//这里会强制返回，下面不要放代码
                 }
             }
             m_decode->m_rowList[i]->mutex.unlock();
@@ -158,6 +143,7 @@ void DecodeTableModel::exitSearch()
 
 void DecodeTableModel::stopAll(bool isRemove)
 {
+    m_isStop=true;
     m_runStateMutex.lock();
     m_isNext=false;
     if(m_isRun==1)
@@ -177,6 +163,42 @@ void DecodeTableModel::stopAll(bool isRemove)
     resetSort();
 }
 
+double DecodeTableModel::showData()
+{
+    qint64 start=0;
+    if(m_session->m_segment!=nullptr && m_session->m_segment->GetMultiply()>0)
+        start=m_session->m_config->m_showStartUnit/m_session->m_segment->GetMultiply();
+    qint64 index=findShowDataFirstData(start);
+    return findShowDataFirstData(start)/(double)m_sortCount;
+}
+
+qint64 DecodeTableModel::findShowDataFirstData(qint64 start)
+{
+    //二分法查找首个数据
+    m_sortDataMutex.lock();
+    QList<DecodeRowData>* data=m_isSearch?&m_searchData:&m_sortData;
+    qint32 selectStart=-1;
+    qint32 left=0,right=data->count();
+    while(left < right)
+    {
+        int mid=(left+right)/2;
+        if(data->at(mid).start<=start && data->at(mid).end>=start){
+            selectStart=mid;
+            break;
+        }
+        else if(data->at(mid).start > start){
+            right = mid; // 中间的值大于目标值，向左收缩区间
+        }
+        else if(data->at(mid).end < start){
+            left = mid+1;// 中间的值小于目标值，向右收缩区间
+        }
+        if(right==left)
+            selectStart=left-(left==0?0:1);
+    }
+    m_sortDataMutex.unlock();
+    return selectStart;
+}
+
 int cmpData(DecodeRowData&e1,DecodeRowData&e2){
     if(e1.start<e2.start)
         return 1;
@@ -186,7 +208,7 @@ int cmpData(DecodeRowData&e1,DecodeRowData&e2){
 
 void DecodeTableModel::refresh()
 {
-    if(m_decode==nullptr && m_showRowList.count()<1)
+    if((m_decode==nullptr && m_showRowList.count()<1) || m_isStop)
         return;
     m_runStateMutex.lock();
     if(m_isRun!=2){
@@ -201,11 +223,22 @@ void DecodeTableModel::refresh()
         }
     }else
         m_runStateMutex.unlock();
+    //qSort(m_data.begin(), m_data.end(), cmpData);
 }
 
 void DecodeTableModel::setLineHeight(qint32 lineHeight)
 {
     m_set.lineHeight=lineHeight;
+}
+
+QVariantMap DecodeTableModel::get(int rowIndex) {
+    QVariantMap res;
+    for(qint32 i=0;i<m_column;i++){
+        QModelIndex idx = index(rowIndex, i);
+        res[QString::number(i)] = idx.data(Qt::DisplayRole);
+    }
+    res["size"]=m_column;
+    return res;
 }
 
 qint32 DecodeTableModel::refreshBuffer(qint32 y)
@@ -218,6 +251,7 @@ qint32 DecodeTableModel::refreshBuffer(qint32 y)
     qint32 offsetCurrent=middle-current;
     qint32 recode=m_set.bufferFirst;
     if(current<=topLine){
+        //缓冲区往顶部偏移
         if(m_set.bufferFirst!=0){
             m_set.bufferFirst-=offsetCurrent;
             if(m_set.bufferFirst<0){
@@ -228,6 +262,7 @@ qint32 DecodeTableModel::refreshBuffer(qint32 y)
             refreshBuffer();
         }
     }else if(current>=bottomLine){
+        //缓冲区往底部偏移
         if(m_set.bufferFirst+m_set.bufferSize<m_sortCount){
             m_set.bufferFirst-=offsetCurrent;
             offset=offsetCurrent*m_set.lineHeight;
@@ -259,32 +294,44 @@ qint32 DecodeTableModel::getShowFirst()
     return m_set.bufferFirst;
 }
 
-qint32 DecodeTableModel::scrollPosition(double position)
+qint64 DecodeTableModel::getFirstStart(double position)
 {
-    qint32 count=m_sortCount;
+    if(m_count>0){
+        qint32 current=position*m_sortCount;
+        return m_data[current-m_set.bufferFirst].start*m_decode->m_multiply;
+    }
+    return -1;
+}
+
+qint32 DecodeTableModel::scrollPosition(double position, double height)
+{
     qint32 middle=m_set.bufferSize/2;
-    qint32 current=position*count;
-    double offset=(position*count-current)*m_set.lineHeight;
+    qint32 current=position*m_sortCount;
     m_set.bufferFirst=current-middle;
     if(m_set.bufferFirst<0)
         m_set.bufferFirst=0;
-    else if(m_set.bufferFirst+m_set.bufferSize>count)
-        m_set.bufferFirst=count-m_set.bufferSize;
+    else if(m_set.bufferFirst+m_set.bufferSize>m_sortCount)
+        m_set.bufferFirst=m_sortCount-m_set.bufferSize;
     if(m_set.bufferFirst<0)
         m_set.bufferFirst=0;
     refreshBuffer();
-    return (current-m_set.bufferFirst)*m_set.lineHeight+offset;
+    current-=m_set.bufferFirst;
+    if(current+height/m_set.lineHeight>m_sortCount-m_set.bufferFirst)
+        current=m_sortCount-m_set.bufferFirst-height/m_set.lineHeight;
+    if(current<0)
+        current=0;
+    return current*m_set.lineHeight;
 }
 
 void DecodeTableModel::refreshBuffer()
 {
     m_sortDataMutex.lock();
     qint32 showCount=qMin(m_sortCount,m_set.bufferFirst+m_set.bufferSize);
-    QVector<DecodeRowData>* data=m_isSearch?&m_searchData:&m_sortData;
+    QList<DecodeRowData>* data=m_isSearch?&m_searchData:&m_sortData;
     m_data=data->mid(m_set.bufferFirst,showCount-m_set.bufferFirst);
     showCount=m_data.count();
-    m_sortDataMutex.unlock();
     setCount(showCount);
+    m_sortDataMutex.unlock();
     if(showCount>0)
     {
         QModelIndex start_index = createIndex(0, 0);
@@ -296,6 +343,8 @@ void DecodeTableModel::refreshBuffer()
 
 void DecodeTableModel::sortData()
 {
+    if(m_isStop)
+        return;
     m_runStateMutex.lock();
     qint32 runState=m_isRun;
     m_runStateMutex.unlock();
@@ -348,39 +397,48 @@ void DecodeTableModel::sortData()
             }
         }
         m_sortDataMutex.lock();
-        if(!m_isSearch){
+        if(!m_isSearch)
             m_sortCount=m_sortData.count();
-            m_sortDataMutex.unlock();
-        }else{
+        else{
             m_searchData.clear();
-            QVector<searchRow> searchRowList;
-            for(qint32 i=0;i<m_rowType.count();i++){
-                for (auto ii : m_rowType[i])
-                {
-                    if(ii["desc"].toString().toLower().contains(m_searchText)){
-                        searchRow tmp;
-                        tmp.decodeIndex=i;
-                        tmp.type=ii["list"].toArray();
-                        searchRowList.append(tmp);
+            QList<QString> needStr;
+            QList<QString> notStr;
+            QList<QString> split;
+            if(m_searchText.indexOf("&&")!=-1)
+                split=m_searchText.split("&&");
+            else
+                split.append(m_searchText);
+            for(auto &i:split){
+                if(i.startsWith("!!")&&i.length()>2)
+                    notStr.append(i.right(i.length()-2));
+                else
+                    needStr.append(i);
+            }
+            QString str;
+            bool isAppend;
+            for(auto &i:m_sortData){
+                str=i.longText.toLower();
+                isAppend=true;
+                for(int j=0;j<needStr.size();j++){
+                    if(!str.contains(needStr[j])){
+                        isAppend=false;
+                        break;
                     }
                 }
-            }
-            for(auto &i:m_sortData){
-                if(i.longText.toLower().contains(m_searchText))
-                    m_searchData.append(i);
-                else{
-                    for(qint32 ii=0;ii<searchRowList.count();ii++){
-                        if(searchRowList[ii].decodeIndex==i.decodeIndex&&searchRowList[ii].type.contains(i.type)){
-                            m_searchData.append(i);
+                if(isAppend){
+                    for(int j=0;j<notStr.size();j++){
+                        if(str.contains(notStr[j])){
+                            isAppend=false;
                             break;
                         }
                     }
                 }
-
+                if(isAppend)
+                    m_searchData.append(i);
             }
             m_sortCount=m_searchData.count();
-            m_sortDataMutex.unlock();
         }
+        m_sortDataMutex.unlock();
         if(m_set.bufferFirst+m_set.bufferSize>m_sortCount)
             m_set.bufferFirst=m_sortCount-m_set.bufferSize;
         if(m_set.bufferFirst<0)
@@ -416,8 +474,8 @@ void DecodeTableModel::resetSort()
     m_searchData.clear();
     m_sortData.clear();
     m_data.clear();
-    m_sortDataMutex.unlock();
     setCount(0);
+    m_sortDataMutex.unlock();
 }
 
 void DecodeTableModel::saveTableReady(QJSValue val)
@@ -428,6 +486,16 @@ void DecodeTableModel::saveTableReady(QJSValue val)
     m_session->m_tableSaveIndex.clear();
     for(qint32 i=0;i<val.property("length").toUInt();i++)
         m_session->m_tableSaveIndex.append(val.property(i).toInt());
+}
+
+bool DecodeTableModel::isStop()
+{
+    return m_isStop;
+}
+
+void DecodeTableModel::setStop(bool stop)
+{
+    m_isStop=stop;
 }
 
 int DecodeTableModel::rowCount(const QModelIndex &parent) const
@@ -450,9 +518,11 @@ QHash<int, QByteArray> DecodeTableModel::roleNames() const
 QVariant DecodeTableModel::data(const QModelIndex &index, int role) const
 {
     int row = index.row();
-    if(row < 0 || row >= m_count)
-        return QVariant("");
     m_sortDataMutex.lock();
+    if(row < 0 || row >= m_count){
+        m_sortDataMutex.unlock();
+        return QVariant("");
+    }
     DecodeRowData rowData=m_data[row];
     m_sortDataMutex.unlock();
     switch (role) {

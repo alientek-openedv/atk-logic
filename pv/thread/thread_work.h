@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef THREAD_WORK_H
+﻿#ifndef THREAD_WORK_H
 #define THREAD_WORK_H
 
 class ThreadRead;
@@ -24,6 +8,7 @@ class ThreadRead;
 #include <QDataStream>
 #include <QJsonArray>
 #include "pv/controller/session_error.h"
+#include "pv/static/zip_helper.h"
 #include <pv/data/session_config.h>
 #include "pv/data/analysis.h"
 #include "pv/usb/usb_control.h"
@@ -51,9 +36,10 @@ public:
                                   QHash<QString,DecodeController*>* decodes);
     void LoadSourceFileThreadPara(QString filePath, Segment* segment, SessionConfig* config,
                                   QVector<MeasureData>* measureList, QVector<VernierData>* vernierList, QHash<QString,DecodeController*>* decodes,
-                                  QVector<QString>* channelsNames);
+                                  QVector<QString>* channelsNames, bool isSendDecode);
+    void SaveBinFileThreadPara(QString filePath, Segment* segment, qint32 type, QString channels);
     void GlitchRemovalThreadPara(Segment* segment);
-    void SaveDecodeTableThreadPara(QString filePath, qint32 multiply, QVector<DecodeRowData>* data, QVector<QMap<QString,QJsonObject>>* rowType, QVector<bool>* saveList);
+    void SaveDecodeTableThreadPara(QString filePath, qint32 multiply, QList<DecodeRowData>* data, QList<QMap<QString,QJsonObject>>* rowType, QVector<bool>* saveList);
     void calcMeasureData(qint32 measureID, qint32 channelID, QVector<MeasureData>* measure, Segment* segment);
     void destroy();
     void stop(bool waitClose=false);
@@ -65,6 +51,7 @@ private:
     void calcFRing(qint64 start,qint64 end,MeasureData* data, qint32 channelID, Segment* segment);
     void setRun(qint8 state);
     bool isRun();
+    QString creanTimestampDir(QString path, bool isFile=false);
 
 signals:
     void SendReadThreadStart(USBControl* usb, qint32 maxTransferSize, ThreadWork* parent);
@@ -79,6 +66,9 @@ signals:
     void appendDecode(QString json, bool end);
     void calcMeasureDataComplete(qint32 measureID);
     void sendGlitchString(QString str);
+    void sendZipDirSchedule(qint32 schedule);
+    void sendUnZipDirSchedule(qint32 schedule);
+    void decodeToPosition(qint64 position, qint64 maxSample_);
 
 private:
     QThread m_thread;

@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../../config"
 import "../../style"
@@ -23,6 +7,7 @@ Rectangle {
     color: Config.background2Color
     clip: true
     Component.onCompleted: {
+        //默认全开所有通道
         if(sSettings.isFirst)
             setNumChannelState(sessionChannelCount_,true);
 
@@ -47,10 +32,14 @@ Rectangle {
 
     Timer{
         id: delayInit
-        interval: 200
+        interval: 400
         onTriggered: {
             if(sConfig.isCloseNotDataChannels)
                 sSignal.closeNotDataChannels();
+            if(sSettings.glitchRemoval.length!==0){
+                controller.setGlitchRemoval(sSettings.glitchRemoval);
+                con.recode=JSON.stringify(sSettings.glitchRemoval);
+            }
         }
     }
 
@@ -98,18 +87,21 @@ Rectangle {
                 resetHzComboBox();
             }
         }
-
-        function onIsRunChanged(){
-            channelSelectMenuPopup.close();
-        }
     }
     Connections{
         target: sSignal
-        function onSessionSelect(){
-            setStateText();
+
+        function onCloseAllPopup(){
+            channelSelectMenuPopup.close();
+        }
+
+        function onSessionSelect(isSelect){
+            if(isSelect)
+                setStateText();
         }
 
         function onCloseNotDataChannels(){
+            setNumChannelState(16,true);
             for(var i=0;i<sessionChannelCount_;i++){
                 if(controller.getChannelMaxSample(i)===0){
                     setChannelState(i,false);
@@ -164,6 +156,8 @@ Rectangle {
             {
                 controller.setGlitchRemoval(dataJson);
                 con.recode=JSON.stringify(dataJson);
+                sSettings.glitchRemoval=JSON.stringify(dataJson);
+                sSettings.save();
             }
         }
 
@@ -178,12 +172,14 @@ Rectangle {
         }
     }
 
+    //重设毛刺过滤
     function resetGlitchRemoval(isSet){
         con.recode='[{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1},{"enable":false,"num":1}]'
         if(isSet)
             controller.setGlitchRemoval(JSON.parse(con.recode));
     }
 
+    //设置通道状态
     function setNumChannelState(num,isOpen){
         for(var i in channelRow.children){
             if(typeof(channelRow.children[i].button)!="undefined")
@@ -198,6 +194,7 @@ Rectangle {
         }
     }
 
+    //设置单个通道状态
     function setChannelState(channelID_,isOpen){
         for(var i in channelRow.children){
             if(typeof(channelRow.children[i].button)!=="undefined")
@@ -239,6 +236,8 @@ Rectangle {
                 right: parent.right
                 verticalCenter: parent.verticalCenter
             }
+            imageWidth: 2
+            imageHeight: 12
             imageSource: "resource/icon/"+Config.tp+"/More.png"
             imageEnterSource: "resource/icon/"+Config.tp+"/MoreEnter.png"
             imageDisableSource: "resource/icon/"+Config.tp+"/MoreDisable.png"
@@ -254,8 +253,8 @@ Rectangle {
             showShortcutKey: false
             data: [{"showText":qsTr("3ch")+(sConfig.isBuffer?sessionLevel_===1?"(1GHz)":"(250MHz)":"(100MHz)"),"shortcutKey":"","seleteType":0,"buttonIndex":0},
                 {"showText":qsTr("8ch")+(sConfig.isBuffer?sessionLevel_===1?"(1GHz)":"(250MHz)":"(25MHz)"),"shortcutKey":"","seleteType":0,"buttonIndex":1},
-                {"showText":qsTr("12ch")+(sConfig.isBuffer?sessionLevel_===1?"(500MHz)":"(100MHz)":"(25MHz)"),"shortcutKey":"","seleteType":0,"buttonIndex":2},
-                {"showText":qsTr("16ch")+(sConfig.isBuffer?sessionLevel_===1?"(500MHz)":"(100MHz)":"(20MHz)"),"shortcutKey":"","seleteType":0,"buttonIndex":3},
+                {"showText":qsTr("12ch")+(sConfig.isBuffer?sessionLevel_===1?"(500MHz)":"(250MHz)":"(25MHz)"),"shortcutKey":"","seleteType":0,"buttonIndex":2},
+                {"showText":qsTr("16ch")+(sConfig.isBuffer?sessionLevel_===1?"(500MHz)":"(250MHz)":"(20MHz)"),"shortcutKey":"","seleteType":0,"buttonIndex":3},
                 {"showText":"-","shortcutKey":"","seleteType":0,"buttonIndex":-1},
                 {"showText":qsTr("1X通道高度"),"shortcutKey":"","seleteType":selectIndex==11?2:1,"buttonIndex":11},
                 {"showText":qsTr("2X通道高度"),"shortcutKey":"","seleteType":selectIndex==12?2:1,"buttonIndex":12},
@@ -293,9 +292,15 @@ Rectangle {
                             temp["num"]=js[i]["num"];
                             dataJson.push(temp);
                         }
+                        let openChannels=[];
+                        for(let i in sSettings.channelsSet){
+                            if(sSettings.channelsSet[i].enable)
+                                openChannels.push(parseInt(i));
+                        }
                         let subParams = {
                             "dataJson":dataJson,
-                            "screen": root.getScreenQRect()
+                            "screen": root.getScreenQRect(),
+                            "openChannels": openChannels
                         }
                         let showWindow = component.createObject(root, subParams);
                         showWindow.show();
@@ -325,18 +330,26 @@ Rectangle {
                         sSignal.channelNameSignalChanged(i,"Channel "+i)
                     break;
                 case 11:
+                    if(selectIndex==11)
+                        sSettings.channelHeightMultiple=2;
                     selectIndex=11;
                     sSettings.channelHeightMultiple=1;
                     break;
                 case 12:
+                    if(selectIndex==12)
+                        sSettings.channelHeightMultiple=1;
                     selectIndex=12;
                     sSettings.channelHeightMultiple=2;
                     break;
                 case 13:
+                    if(selectIndex==13)
+                        sSettings.channelHeightMultiple=2;
                     selectIndex=13;
                     sSettings.channelHeightMultiple=4;
                     break;
                 case 14:
+                    if(selectIndex==14)
+                        sSettings.channelHeightMultiple=4;
                     selectIndex=14;
                     sSettings.channelHeightMultiple=8;
                     break;
@@ -636,13 +649,13 @@ Rectangle {
                     width: 90
                     model: ListModel{
                         ListElement { showText: qsTr("自定义阈值"); cost: -1 }
-                        ListElement { showText: "5.0V CMOS"; cost: 3.0 }
-                        ListElement { showText: "3.3V CMOS"; cost: 2.0 }
-                        ListElement { showText: "3.0V CMOS"; cost: 1.8 }
-                        ListElement { showText: "2.5V CMOS"; cost: 1.5 }
-                        ListElement { showText: "1.8V CMOS"; cost: 1.0 }
-                        ListElement { showText: "1.5V CMOS"; cost: 0.9 }
-                        ListElement { showText: "1.2V CMOS"; cost: 0.7 }
+                        ListElement { showText: "5.0V CMOS"; cost: 2.5 }
+                        ListElement { showText: "3.3V CMOS"; cost: 1.6 }
+                        ListElement { showText: "3.0V CMOS"; cost: 1.5 }
+                        ListElement { showText: "2.5V CMOS"; cost: 1.2 }
+                        ListElement { showText: "1.8V CMOS"; cost: 0.9 }
+                        ListElement { showText: "1.5V CMOS"; cost: 0.7 }
+                        ListElement { showText: "1.2V CMOS"; cost: 0.6 }
                     }
                     disable: !moreButton.enabled
                     currentIndex: sSettings.settingData["selectThresholdLevelIndex"];
@@ -699,11 +712,13 @@ Rectangle {
                         radius: 8
                         color: "transparent"
                         Image {
-                            fillMode: Image.Pad
+                            fillMode: Image.PreserveAspectFit
                             anchors{
                                 fill: parent
                                 margins: 5
                             }
+                            width: 216
+                            height: 143
                             source: "qrc:resource/icon/"+Config.tp+"/thresholdLevelTooltip.png"
                         }
                     }
@@ -792,6 +807,7 @@ Rectangle {
                     }
                     from: 1
                     to: 90
+                    splice: 9
                     postfixText: "%"
                     isShowText: false
                     enabled: sConfig.loopState===-1 && !sConfig.isRun && sConfig.isBuffer
@@ -986,6 +1002,7 @@ Rectangle {
                     text: "PWM0"
                     font.pixelSize: 14
                     color: Config.textColor
+                    anchors.verticalCenter: parent.verticalCenter
                 }
                 ImageButton{
                     property bool isOpen: false
@@ -1096,6 +1113,7 @@ Rectangle {
                     text: "PWM1"
                     font.pixelSize: 14
                     color: Config.textColor
+                    anchors.verticalCenter: parent.verticalCenter
                 }
                 ImageButton{
                     property bool isOpen: false
@@ -1298,10 +1316,11 @@ Rectangle {
             var t="";
             if(typeof(sSettings.settingData)!=="undefined"){
                 t+=(qsTr("时间: ")+time2Unit(sSettings.settingData["setTime"],2)+"   ");
-                t+=(qsTr("频率: ")+hz2Unit(sSettings.settingData["setHz"])+"   ");
+                t+=(qsTr("频率: ")+hz2Unit(sSettings.settingData["setHz"],6)+"   ");
                 t+=(qsTr("阈值: ")+sSettings.settingData["thresholdLevel"].toString()+" V   ");
                 t+=(qsTr("深度: ")+samplingDepthText.text);
             }
+            //            t+=("USB: "+sessionUSB);
             stateText=t;
             Signal.setStateText(t);
         }else
@@ -1312,6 +1331,7 @@ Rectangle {
     }
 
     function pwmSend(index){
+        //防止初始化的时候自动启动pwm
         if(index===0&&!pwm0Button.isOpen||index===1&&!pwm1Button.isOpen)
             return;
         var hz,duty;

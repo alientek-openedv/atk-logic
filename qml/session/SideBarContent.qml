@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 import "../style"
@@ -46,7 +30,7 @@ Rectangle {
             left: parent.left
             leftMargin: 1
         }
-        asynchronous: true  
+        asynchronous: true  //异步加载会话
     }
 
     Connections{
@@ -94,6 +78,7 @@ Rectangle {
             width: parent.width
             height: parent.height
             color: Config.background2Color
+            //设置
             ScrollView {
                 property var contentType: Config.SidebarContentType.Set
                 id: setContentScrollView
@@ -141,6 +126,7 @@ Rectangle {
                 }
             }
 
+            //解码
             DecodeContent{
                 id: decodeContent
                 height: parent.height
@@ -153,6 +139,56 @@ Rectangle {
                 visible: sConfig.sidebarContentType===Config.SidebarContentType.Decode
             }
 
+            //触发
+//            ScrollView {
+//                property var contentType: Config.SidebarContentType.Trigger
+//                id: triggerContentScrollView
+//                implicitHeight: parent.height
+//                implicitWidth: parent.width
+//                clip: true
+//                visible: sConfig.sidebarContentType===triggerContentScrollView.contentType
+//                anchors{
+//                    top: parent.top
+//                    left: parent.left
+//                }
+//                Flickable{
+//                    id: triggerContentColumnLayout
+//                    flickableDirection: Flickable.AutoFlickDirection
+//                    boundsBehavior: Flickable.StopAtBounds
+//                    contentWidth: parent.width-28
+//                    contentHeight: triggerContent.height
+//                    anchors{
+//                        top: parent.top
+//                        left: parent.left
+//                        margins: 14
+//                    }
+//                    TriggerContent{
+//                        id: triggerContent
+//                        height: 300
+//                        width: parent.width
+//                    }
+//                }
+//                onContentHeightChanged: setScrollBarVisible(triggerContentScrollBar,triggerContentScrollView.contentType,height<contentHeight)
+//                onHeightChanged: setScrollBarVisible(triggerContentScrollBar,triggerContentScrollView.contentType,height<triggerContentColumnLayout.height)
+//                onVisibleChanged: {
+//                    if(visible)
+//                        setScrollBarVisible(triggerContentScrollBar,triggerContentScrollView.contentType,height<contentHeight)
+//                    else
+//                        setScrollBarVisible(triggerContentScrollBar,triggerContentScrollView.contentType,false)
+//                }
+//                ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+//                Component.onCompleted: ScrollBar.vertical=triggerContentScrollBar
+//            }
+//            QScrollBar{
+//                id: triggerContentScrollBar
+//                visible: false
+//                anchors{
+//                    top: parent.top
+//                    right: parent.right
+//                }
+//            }
+
+            //测量
             MeasureContent{
                 id: measureContent
                 height: parent.height
@@ -165,6 +201,7 @@ Rectangle {
                 visible: sConfig.sidebarContentType===Config.SidebarContentType.Measure
             }
 
+            //搜索
             SearchContent{
                 id: searchContent
                 height: parent.height

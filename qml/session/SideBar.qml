@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 import "../style"
@@ -36,9 +20,11 @@ Rectangle {
             sSettings.save();
             sSignal.measureRemoveAll();
             vernierListModel.remove(0);
-            progressBar.currentValue=0;
-            progressBar.type=0;
-            progressBar.visible=controller.start(startSet, startSetType);
+            if(!controller.start(startSet, startSetType)){
+                progressBar.closeButtonClick();
+                sConfig.isRun=false;
+            }else
+                progressBar.visible=controller.getProgressBarShow();
         }
     }
 
@@ -110,8 +96,9 @@ Rectangle {
             showSidebarContent(sidebarContentType,true);
         }
 
-        function onSessionSelect(){
-            Signal.refreshMenuTabIcon(sConfig.sidebarContentType, sessionType_)
+        function onSessionSelect(isSelect){
+            if(isSelect)
+                Signal.refreshMenuTabIcon(sConfig.sidebarContentType, sessionType_)
         }
 
         function onShowCollectorSchedule(schedule, visible_){
@@ -217,6 +204,20 @@ Rectangle {
                     hotkey: Setting.protocolDecode
                 }
             }
+            //            ImageButton{
+            //                id: triggerButton
+            //                anchors.horizontalCenter: parent.horizontalCenter
+            //                width: 30
+            //                height: 30
+            //                imageSource: sConfig.sidebarContentType===Config.SidebarContentType.Trigger?"resource/icon/TriggerActivate.png":"resource/icon/Trigger.png"
+            //                imageEnterSource: sConfig.sidebarContentType===Config.SidebarContentType.Trigger?"resource/icon/TriggerActivate.png":"resource/icon/Trigger.png"
+            //                onPressed: showSidebarContent(Config.SidebarContentType.Trigger,false)
+            //                QToolTip{
+            //                    parent: parent
+            //                    isShow: parent.containsMouse
+            //                    showText: qsTr("条件触发")
+            //                }
+            //            }
             ImageButton{
                 id: measureButton
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -327,8 +328,18 @@ Rectangle {
         decodeTableModel.stopAll(false);
         searchTableModel.stopAll();
         sSignal.measureEnd();
-        sSignal.vernierCreate(2);
+        sSignal.vernierCancelMove();
         sSignal.closeVernierPopup();
+        sSignal.crossChannelMeasureState(true);
+        if(!sConfig.isBuffer){
+            controller.cleanAllDecode();
+            sConfig.isStopDecode=false;
+            sSignal.setLiveFollowing(0,true);
+        }
+        progressBar.currentValue=0;
+        progressBar.type=0;
+        if(!sConfig.isBuffer)
+            progressBar.visible=false;
         startTimer.start();
     }
 }

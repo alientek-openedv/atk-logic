@@ -1,29 +1,13 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import "../config"
 
 Rectangle {
     id: rootContent
     visible: false
     width: 175
-    height: 80
+    height: 70
     radius: 6
-    color: "#ddbcedff"
+    color: Setting.mouseMeasureBackColor
     z: 1000
 
     QtObject{
@@ -62,6 +46,7 @@ Rectangle {
             }
         }
     }
+
     Item {
         width: parent.width-40
         height: parent.height-40
@@ -78,17 +63,17 @@ Rectangle {
             Text {
                 text: "周期(Period)"
                 font.pixelSize: 12
-                color: "#383838"
+                color: Setting.mouseMeasureTextColor
             }
             Text {
                 text: "频率(Freq)"
                 font.pixelSize: 12
-                color: "#383838"
+                color: Setting.mouseMeasureTextColor
             }
             Text {
                 text: "占空比(Duty)"
                 font.pixelSize: 12
-                color: "#383838"
+                color: Setting.mouseMeasureTextColor
             }
         }
         Column{
@@ -101,17 +86,17 @@ Rectangle {
             Text {
                 text: ": "+set.periodText
                 font.pixelSize: 12
-                color: "#383838"
+                color: Setting.mouseMeasureTextColor
             }
             Text {
                 text: ": "+set.freqText
                 font.pixelSize: 12
-                color: "#383838"
+                color: Setting.mouseMeasureTextColor
             }
             Text {
                 text: ": "+set.dutyText
                 font.pixelSize: 12
-                color: "#383838"
+                color: Setting.mouseMeasureTextColor
             }
         }
     }

@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "draw_channel.h"
+﻿#include "draw_channel.h"
 
 DrawChannel::DrawChannel(QQuickItem* parent): QQuickPaintedItem(parent) {
     connect(this,SIGNAL(widthChanged()),this,SLOT(onSizeChanged()));
@@ -31,10 +15,17 @@ DrawChannel::DrawChannel(QQuickItem* parent): QQuickPaintedItem(parent) {
     m_measureTypeColor[6]=QColor::fromRgb(0x0392CE);
     m_measureTypeColor[7]=QColor::fromRgb(0x66B132);
 
-    m_measureSelectAlpha[0]=230;
-    m_measureSelectAlpha[1]=102;
-    m_measureNotSelectAlpha[0]=76;
-    m_measureNotSelectAlpha[1]=38;
+    m_vernierTypeColor[0]="#26A3D9";
+    m_vernierTypeColor[1]="#ED5756";
+    m_vernierTypeColor[2]="#0DA074";
+    m_vernierTypeColor[3]="#7F5DCD";
+    m_vernierTypeColor[4]="#F59647";
+    m_vernierTypeColor[5]="#CE437E";
+
+    m_measureSelectAlpha[0]=230;//光标透明度 90%
+    m_measureSelectAlpha[1]=102;//矩形透明度 40%
+    m_measureNotSelectAlpha[0]=76;//光标透明度 30%
+    m_measureNotSelectAlpha[1]=38;//矩形透明度 15%
 }
 
 DrawChannel::~DrawChannel()
@@ -67,28 +58,29 @@ void DrawChannel::paint(QPainter* painter)
                 return;
         }
         m_session->m_segment->appendCite();
-        if(m_configRecode!=*m_session->m_config || !m_doubleBuffer->isPixmap() || (!m_isDecode&&m_session->m_segment->m_isFirst[m_channelID]) || m_isDecode)
+        if(m_configRecode!=*m_session->m_config || (!m_isDecode&&m_session->m_segment->m_isFirst[m_channelID]) || m_isDecode)
         {
             if(!m_isDecode)
                 m_session->m_segment->m_isFirst[m_channelID]=false;
             m_configRecode=*m_session->m_config;
-            m_doubleBuffer->refReshBuffer();
         }
-        painter->setRenderHints(QPainter::HighQualityAntialiasing, true);
-        QPixmap pixmap=m_doubleBuffer->getPixmap();
-        QPainter t;
-        t.begin(&pixmap);
-        
+        painter->save();
+        QFont font = painter->font();
+        font.setPixelSize(12);
+        painter->setFont(font);
+        m_doubleBuffer->refReshBuffer(painter);
+        painter->setFont(font);
+        //区分是否解码器
         if(m_isDecode){
             if(m_doubleBuffer->m_decodeHeight!=m_height)
                 setHeight(m_doubleBuffer->m_decodeHeight);
         }else{
-            measureMethod(m_mousePoint.x(), &t);
+            measureMethod(m_mousePoint.x(), painter);
             if(m_measureState>0)
             {
                 QColor color=m_measureTypeColor[m_session->m_measureIndex%8];
                 color.setAlpha(m_measureSelectAlpha[0]);
-                t.setPen(QPen(color, 1));
+                painter->setPen(QPen(color, 1));
                 if(m_measurePoint.y>=0 && m_measurePoint.x>=0)
                 {
                     color.setAlpha(m_measureSelectAlpha[1]);
@@ -98,21 +90,23 @@ void DrawChannel::paint(QPainter* painter)
                         tempX=0;
                     else
                         drawStart=true;
-                    t.fillRect(tempX,m_measureOffset,m_measurePoint.y-tempX,m_height-m_measureOffset*2+1,color);
-                    t.drawLine(m_measurePoint.y,m_measureOffset,m_measurePoint.y,m_height-m_measureOffset);
+                    painter->fillRect(tempX,m_measureOffset,m_measurePoint.y-tempX,m_height-m_measureOffset*2+1,color);
+                    painter->drawLine(m_measurePoint.y,m_measureOffset,m_measurePoint.y,m_height-m_measureOffset);
                     if(drawStart)
-                        t.drawLine(tempX,m_measureOffset,tempX,m_height-m_measureOffset);
+                        painter->drawLine(tempX,m_measureOffset,tempX,m_height-m_measureOffset);
                 } else if(m_measurePoint.x>=0)
-                    t.drawLine(m_measurePoint.x,m_measureOffset,m_measurePoint.x,m_height-m_measureOffset);
+                    painter->drawLine(m_measurePoint.x,m_measureOffset,m_measurePoint.x,m_height-m_measureOffset);
             }
-            if(m_session->m_segment->isData[m_channelID] && m_mousePoint.x()>=0 && !m_isVernierMove && m_isMouseMeasure)
-                drawMouseMeasure(t, m_session->m_segment);
+            if(m_crossChannelMeasureState!=0){
+                if(m_crossChannelMeasureState==1){
+                    qint32 x=(m_crossChannelMeasureStartPosition-m_session->m_config->m_showStartUnit)/m_session->m_config->m_showConfig.m_pixelUnit;
+                    emit sendCrossChannelMeasurePosition(m_crossChannelMeasureState, x, m_height/2, m_mousePoint.y(), m_crossChannelMeasureStartPosition, true);
+                }
+            }else if(m_session->m_segment->isData[m_channelID] && m_mousePoint.x()>=0 && !m_isVernierMove)
+                drawMouseMeasure(painter, m_session->m_segment);
         }
         if(m_currentButton==Qt::RightButton)
             emit mouseZoom(true, m_zoomPoint.x(),m_zoomPoint.y(),m_zoomPointEnd.x()-m_zoomPoint.x(),m_zoomPointEnd.y()-m_zoomPoint.y());
-        t.end();
-        painter->save();
-        painter->drawPixmap(0, 0, pixmap, 0, 0, m_width, m_height);
         painter->restore();
         m_session->m_segment->lessenCite();
     }
@@ -122,7 +116,12 @@ void DrawChannel::mousePressEvent(QMouseEvent* event)
 {
     if(m_isExit)
         return;
+    emit stopXWheel();
     setKeepMouseGrab(true);
+    if(m_crossChannelMeasureState!=0){
+        emit crossChannelMeasureState(true);
+        return;
+    }
     m_mousePoint=event->pos();
     m_zoomPointEnd=m_mousePoint;
     if(m_currentButton==Qt::RightButton)
@@ -134,19 +133,23 @@ void DrawChannel::mousePressEvent(QMouseEvent* event)
     if(m_currentButton==Qt::LeftButton)
     {
         m_adsorbChannelID=m_channelID;
-
-        if(m_vernierCreateModel)
+        if(m_vernierCreateModel){
+            m_oldPoint=QPoint();
             emit vernierCreateComplete();
+        }
         else if(m_measureState==1){
+            m_oldPoint=QPoint();
             emit measureMoveState(true);
             m_measureState=2;
         }
         else if(m_measureEnter&&m_selectMeasureIndex!=-1){
+            m_oldPoint=QPoint();
             emit measureMoveState(true);
             m_measureState=4;
         }
         else if(m_selectVernierIndex!=-1)
         {
+            m_oldPoint=QPoint();
             emit vernierMoveState(true,m_session->m_vernier[m_selectVernierIndex].id);
             m_isVernierMove=true;
             emit closeMouseMeasurePopup();
@@ -169,15 +172,34 @@ void DrawChannel::mouseReleaseEvent(QMouseEvent* event)
 {
     if(m_isExit)
         return;
+    emit stopXWheel();
     m_zoomPointEnd=event->pos();
     setKeepMouseGrab(false);
     if(m_currentButton==Qt::LeftButton)
     {
         QRect r(m_oldPoint.x()-1,m_oldPoint.y()-1,3,3);
         if(r.contains(event->globalPos())){
-            measureMethod(m_mousePoint.x(),nullptr,true);
-            if(m_selectVernierIndex==-1)
-                vernierMethod(true);
+            m_crossChannelMeasureStartPosition=getAdsorbPosition(m_mousePoint.x(),true);
+            if(m_crossChannelMeasureStartPosition<m_session->m_config->m_showStartUnit)
+                m_crossChannelMeasureStartPosition=-1;
+            if(m_crossChannelMeasureStartPosition!=-1){
+                QVector<MeasureData> measure=m_session->m_measure;
+                qint32 measureCount=measure.count()-1;
+                for(qint32 i=measureCount;i>=0;i--){
+                    if(measure[i].isSelect)
+                        m_session->m_measure[i].isSelect=false;
+                }
+                m_crossChannelMeasureState=1;
+                qint32 x=(m_crossChannelMeasureStartPosition-m_session->m_config->m_showStartUnit)/m_session->m_config->m_showConfig.m_pixelUnit;
+                emit crossChannelMeasureState(false);
+                emit sendCrossChannelMeasurePosition(m_crossChannelMeasureState, x, m_height/2, m_mousePoint.y(), m_crossChannelMeasureStartPosition, true);
+                emit closeMouseMeasurePopup();
+            }else
+            {
+                measureMethod(m_mousePoint.x(),nullptr,true);
+                if(m_selectVernierIndex==-1)
+                    vernierMethod(true);
+            }
             emit measureSelectChanged();
             update();
         }
@@ -191,6 +213,8 @@ void DrawChannel::mouseReleaseEvent(QMouseEvent* event)
             update();
         }
     }else if(m_currentButton==Qt::RightButton){
+        if(m_selectVernierIndex!=-1)
+            vernierCancelMove();
         zoomMouseRightClick();
     }
 }
@@ -244,7 +268,7 @@ void DrawChannel::mouseMoveEvent(QMouseEvent *event)
             vernierMove(event->x());
         }
         else{
-            emit setLiveFollowing(false);
+            emit setLiveFollowing(2);
             SessionConfig* config=m_session->m_config;
             SessionShowConfig showConfig=config->m_showConfig;
             QPoint newPoint=event->globalPos()-m_oldPoint;
@@ -268,6 +292,14 @@ void DrawChannel::mouseMoveEvent(QMouseEvent *event)
         update();
 }
 
+void DrawChannel::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    if(m_isExit)
+        return;
+    appendVernierData(event->x());
+}
+
+
 void DrawChannel::hoverMoveEvent(QHoverEvent* event)
 {
     if(m_isExit)
@@ -275,6 +307,17 @@ void DrawChannel::hoverMoveEvent(QHoverEvent* event)
     m_mousePoint=event->pos();
     if(m_vernierCreateModel)
         vernierMove(m_mousePoint.x());
+    else if(m_crossChannelMeasureState!=0){
+        qint64 position=getAdsorbPosition(m_mousePoint.x(),true);
+        if(position!=-1&&position<m_session->m_config->m_showStartUnit)
+            position=-1;
+        if(position==-1)
+            emit sendCrossChannelMeasurePosition(2, m_mousePoint.x(), m_mousePoint.y(), m_mousePoint.y(), getAdsorbPosition(m_mousePoint.x()), false);
+        else{
+            qint32 x=(position-m_session->m_config->m_showStartUnit)/m_session->m_config->m_showConfig.m_pixelUnit;
+            emit sendCrossChannelMeasurePosition(2, x, m_height/2, m_mousePoint.y(), position, true);
+        }
+    }
     else{
         if(m_measureState==1)
         {
@@ -317,12 +360,6 @@ void DrawChannel::init(QString sessionID)
     m_session=dataService->getSession(sessionID);
     if(m_session)
         m_sessionID=sessionID;
-}
-
-void DrawChannel::refreshDoubleBuffer()
-{
-    if(m_doubleBuffer!=nullptr)
-        m_doubleBuffer->refReshBuffer();
 }
 
 void DrawChannel::appendMeasureData()
@@ -398,13 +435,13 @@ void DrawChannel::measureMethod(qint32 mouseX, QPainter *painter, bool isClick)
                 painter->fillRect(drawStart,m_measureOffset,qCeil(drawEnd-drawStart),m_height-m_measureOffset*2+1,color);
                 if(m_measureState!=4 && mouseX>-1){
                     if(drawStart-2<mouseX&&drawStart+2>mouseX){
-                        
+                        //鼠标在起始按钮旁边
                         m_selectMeasureIndex=i;
                         m_measureEnter=1;
                         isMeasureEnter=true;
                         setShowCursor(true);
                     }else if(drawEnd-2<mouseX&&drawEnd+2>mouseX){
-                        
+                        //鼠标在结束按钮旁边
                         m_selectMeasureIndex=i;
                         m_measureEnter=2;
                         isMeasureEnter=true;
@@ -441,6 +478,8 @@ void DrawChannel::measureMethod(qint32 mouseX, QPainter *painter, bool isClick)
 
 void DrawChannel::vernierMethod(bool isClick)
 {
+    if(m_isRunCollect)
+        return;
     qint64 start=m_session->m_config->m_showStartUnit;
     double pixelUnit=m_session->m_config->m_showConfig.m_pixelUnit;
     QVector<VernierData>* vernierData=&m_session->m_vernier;
@@ -458,6 +497,7 @@ void DrawChannel::vernierMethod(bool isClick)
         {
             isShow=true;
             m_selectVernierIndex=i;
+            m_selectVernierPosition=data.position;
         }
     }
     setShowCursor(isShow);
@@ -466,9 +506,9 @@ void DrawChannel::vernierMethod(bool isClick)
     emit m_session->drawUpdate();
 }
 
-void DrawChannel::drawMousePopup(qint64 start, qint64 end, bool isTop, QPainter &t)
+void DrawChannel::drawMousePopup(qint64 start, qint64 end, bool isTop, QPainter* painter)
 {
-    t.setPen(QPen(m_mouseMeasureLineColor, 1));
+    painter->setPen(QPen(m_mouseMeasureLineColor, 1));
     qint64 showStartUnit=m_session->m_config->m_showStartUnit;
     double pixelUnit=m_session->m_config->m_showConfig.m_pixelUnit;
     qint64 drawLeft=(start-showStartUnit)/pixelUnit;
@@ -484,39 +524,39 @@ void DrawChannel::drawMousePopup(qint64 start, qint64 end, bool isTop, QPainter 
     if(drawRightR>m_width-20)
         drawRightR=m_width-20;
     qint64 drawLength=drawRight-drawLeft;
-    t.drawLine(drawLeft,top,drawLeft,top+7);
-    t.drawLine(drawRight,top,drawRight,top+7);
+    painter->drawLine(drawLeft,top,drawLeft,top+7);
+    painter->drawLine(drawRight,top,drawRight,top+7);
     if(drawLength>6){
-        
-        t.drawImage(drawLeft+2,top+1,m_arrowsImage[0]);
-        
-        t.drawImage(drawRight-7,top+1,m_arrowsImage[1]);
-        t.drawLine(drawLeft+2,top+3,drawRight-2,top+3);
+        //画左箭头
+        painter->drawImage(drawLeft+2,top+1,m_arrowsImage[0]);
+        //画右箭头
+        painter->drawImage(drawRight-7,top+1,m_arrowsImage[1]);
+        painter->drawLine(drawLeft+2,top+3,drawRight-2,top+3);
     }else
-        t.drawLine(drawLeft,top+3,drawRight,top+3);
+        painter->drawLine(drawLeft,top+3,drawRight,top+3);
     QString drawStr=nsToShowStr(end-start,5);
-    qint32 fontWidth=t.fontMetrics().width(drawStr);
+    qint32 fontWidth=painter->fontMetrics().horizontalAdvance(drawStr);
     if(drawRightR-drawLeftR>fontWidth+10)
         drawRight=drawLeftR+((drawRightR-drawLeftR)-fontWidth-10)/2+1;
     else if(drawRight+fontWidth+30>m_width)
         drawRight=m_width-fontWidth-30;
     else
         drawRight+=1;
-    t.fillRect(drawRight,top+(isTop?9:-17),fontWidth+10,16,m_mouseMeasureBackgroundColor);
-    t.setPen(QPen(m_mouseMeasureTextColor, 1));
-    t.drawText(drawRight+5,top+(isTop?21:-5),drawStr);
+    painter->fillRect(drawRight,top+(isTop?9:-17),fontWidth+10,16,m_mouseMeasureBackgroundColor);
+    painter->setPen(QPen(m_mouseMeasureTextColor, 1));
+    painter->drawText(drawRight+5,top+(isTop?21:-5),drawStr);
 }
 
-qint64 DrawChannel::getAdsorbPosition(qint32 x)
+qint64 DrawChannel::getAdsorbPosition(qint32 x, bool isMouseCheck)
 {
     m_session->m_segment->appendCite();
-    qint32 multiply=m_session->m_segment->GetMultiply();
+    quint32 multiply=m_session->m_segment->GetMultiply();
     if(multiply<1)
         multiply=1;
-    qint64 start=(m_session->m_config->m_showConfig.m_pixelUnit*qMax(x,0)+m_session->m_config->m_showStartUnit);
+    quint64 start=(m_session->m_config->m_showConfig.m_pixelUnit*qMax(x,0)+m_session->m_config->m_showStartUnit);
     if(m_adsorbChannelID<0){
         m_session->m_segment->lessenCite();
-        return start;
+        return isMouseCheck?-1:start;
     }
     qint64 left=m_session->m_segment->GetDataEnd(start/multiply,m_adsorbChannelID,true).position*multiply,right=m_session->m_segment->GetDataEnd(start/multiply,m_adsorbChannelID,false).position*multiply;
     qint32 leftPix=(left-m_session->m_config->m_showStartUnit)/m_session->m_config->m_showConfig.m_pixelUnit;
@@ -529,12 +569,16 @@ qint64 DrawChannel::getAdsorbPosition(qint32 x)
         else if(rightPix-3<=x)
             return right;
         else
-            return start;
-    }else
-        return start;
+            return isMouseCheck?-1:start;
+    }else{
+        if(m_session->m_segment->isData[m_adsorbChannelID] && start/multiply<m_session->m_segment->GetMaxSample(m_adsorbChannelID,false))
+            return isMouseCheck?left:start;
+        else
+            return isMouseCheck?-1:start;
+    }
 }
 
-void DrawChannel::drawMouseMeasure(QPainter &t, Segment *segment)
+void DrawChannel::drawMouseMeasure(QPainter* t, Segment *segment)
 {
     qint32 multiply=segment->GetMultiply();
     if(multiply<=0||m_isRunCollect)
@@ -544,7 +588,7 @@ void DrawChannel::drawMouseMeasure(QPainter &t, Segment *segment)
     }
     qint64 showStartUnit=m_session->m_config->m_showStartUnit;
     double pixelUnit=m_session->m_config->m_showConfig.m_pixelUnit;
-    qint64 position=(pixelUnit*m_mousePoint.x()+showStartUnit)/multiply;
+    quint64 position=(pixelUnit*m_mousePoint.x()+showStartUnit)/multiply;
     if(position>=segment->GetMaxSample(m_channelID)){
         emit closeMouseMeasurePopup();
         return;
@@ -582,8 +626,9 @@ void DrawChannel::drawMouseMeasure(QPainter &t, Segment *segment)
         duty=(dataEnd-dataStart)/(qreal)period*100;
     else
         duty=(dataEnd2-dataEnd)/(qreal)period*100;
-    emit showMouseMeasurePopup(m_mousePoint.x(),nsToShowStr(period,4),hzToShowStr(1000000000/(qreal)period,2),
-                               QString::asprintf("%.2f", duty)+"%");
+    if(m_isMouseMeasure)
+        emit showMouseMeasurePopup(m_mousePoint.x(),nsToShowStr(period,4),hzToShowStr(1000000000/(qreal)period,2),
+                                   QString::asprintf("%.2f", duty)+"%");
 }
 
 void DrawChannel::vernierMove(qint32 x)
@@ -613,6 +658,19 @@ void DrawChannel::zoomMouseRightClick()
     }
     m_currentButton=Qt::LeftButton;
     emit mouseZoom(false,0,0,0,0);
+}
+
+void DrawChannel::appendVernierData(qint32 x)
+{
+    VernierData data;
+    data.id=m_session->m_vernierIndex;
+    data.name="T"+QString::number(data.id);
+    data.dataColor=m_vernierTypeColor[m_session->m_vernierIndex%6];
+    data.position=m_session->m_config->m_showConfig.m_pixelUnit*x+m_session->m_config->m_showStartUnit;
+    data.positionStr=nsToShowStr(data.position);
+    m_session->m_vernier.append(data);
+    m_session->m_vernierIndex++;
+    emit vernierAppend(data.id);
 }
 
 
@@ -646,18 +704,13 @@ qint32 DrawChannel::getLastMeasureID()
     return m_lastMeasureID;
 }
 
-void DrawChannel::forceRefresh()
-{
-    if(m_doubleBuffer!=nullptr)
-        m_doubleBuffer->refReshBuffer();
-    update();
-}
-
 void DrawChannel::setTheme(QString theme)
 {
     m_theme=theme;
     m_arrowsImage[0].load(":/resource/icon/"+m_theme+"/ArrowsLeft.png");
+    m_arrowsImage[0]=m_arrowsImage[0].scaled(QSize(6,5));
     m_arrowsImage[1].load(":/resource/icon/"+m_theme+"/ArrowsRight.png");
+    m_arrowsImage[1]=m_arrowsImage[1].scaled(QSize(6,5));
     if(m_doubleBuffer!=nullptr){
         if(m_theme=="dark")
         {
@@ -679,8 +732,29 @@ void DrawChannel::setTheme(QString theme)
         m_mouseMeasureBackgroundColor=QColor::fromRgb(0x848484);
         m_mouseMeasureTextColor=QColor::fromRgb(0xffffff);
     }
+    update();
+}
 
-    forceRefresh();
+void DrawChannel::vernierCancelMove()
+{
+    m_isVernierMove=false;
+    if(m_selectVernierIndex!=-1){
+        qint32 tmp=m_selectVernierIndex;
+        m_selectVernierIndex=-1;
+        m_vernierCreateModel=false;
+        m_session->m_vernier[tmp].position=m_selectVernierPosition;
+        emit vernierDataChanged(m_session->m_vernier[tmp].id);
+        emit m_session->drawUpdate();
+    }
+}
+
+void DrawChannel::crossChannelMeasureStateModel(bool isStop)
+{
+    if(isStop)
+        m_crossChannelMeasureState=0;
+    else if(m_crossChannelMeasureState==0)
+        m_crossChannelMeasureState=2;
+    update();
 }
 
 #pragma endregion}
@@ -767,7 +841,7 @@ void DrawChannel::setDecodeChannelDesc(const QString &newDecodeChannelDesc)
     m_decodeChannelDesc = newDecodeChannelDesc;
     if(m_doubleBuffer!=nullptr){
         m_doubleBuffer->m_decodeChannelDesc=newDecodeChannelDesc;
-        m_doubleBuffer->refReshBuffer();
+        update();
     }
     emit decodeChannelDescChanged();
 }
@@ -820,6 +894,8 @@ void DrawChannel::setIsRunCollect(bool newIsRunCollect)
     if (m_isRunCollect == newIsRunCollect)
         return;
     m_isRunCollect = newIsRunCollect;
+    if(m_isRunCollect)
+        m_selectVernierIndex=-1;
     emit isRunCollectChanged();
 }
 

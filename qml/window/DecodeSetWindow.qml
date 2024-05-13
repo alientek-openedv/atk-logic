@@ -1,27 +1,11 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.11
+﻿import QtQuick 2.11
 import QtQuick.Window 2.15
 import "../config"
 import "../style"
 
 Window {
     signal dataSend(var decodeJson)
-    property var availableChannels
+    property var channels
     property var decodeJson
     property var vernierJson
     property string initDecode: ""
@@ -35,9 +19,9 @@ Window {
     id: window
     visible: true
     modality: Qt.WindowModal
-    flags: Qt.Window | Qt.FramelessWindowHint
+    flags: Qt.FramelessWindowHint
     color: "#00000000"
-    width: dropShadowTop.width
+    width: rootRectangle.width+12
     height: rootRectangle.height+15
 
     Timer{
@@ -115,46 +99,112 @@ Window {
         }
     }
 
-    Image {
-        id: dropShadowTop
-        width: 562
-        height: 15
-        source: "../../resource/image/DecodeWindowDropShadowTop.png"
-    }
+    //    //@----disable-check M16
+    //    onClosing: function(closeevent){
+    //        dataSend("123456");
+    //    }
 
-    Image {
-        id: dropShadowBottom
-        width: 562
-        height: 15
-        source: "../../resource/image/DecodeWindowDropShadowBottom.png"
-        anchors{
-            top: rootRectangle.bottom
-            topMargin: -6
+    //阴影组件
+    Item{
+        anchors.fill: parent
+
+        Image {
+            height: 15
+            source: "../../resource/DropShadow/Top.png"
+            fillMode: Image.Stretch
+            anchors{
+                left: dropShadowTopLeft.right
+                right: dropShadowTopRight.left
+                top: parent.top
+            }
+        }
+
+        Image {
+            id: dropShadowTopLeft
+            width: 24
+            height: 15
+            source: "../../resource/DropShadow/TopLeft.png"
+            anchors{
+                left: parent.left
+                top: parent.top
+            }
+        }
+
+        Image {
+            id: dropShadowTopRight
+            width: 24
+            height: 15
+            source: "../../resource/DropShadow/TopRight.png"
+            anchors{
+                right: parent.right
+                top: parent.top
+            }
+        }
+
+        Image {
+            width: 24
+            source: "../../resource/DropShadow/Left.png"
+            fillMode: Image.Stretch
+            anchors{
+                left: parent.left
+                top: dropShadowTopLeft.bottom
+                bottom: dropShadowLeftBottom.top
+            }
+        }
+
+        Image {
+            width: 24
+            source: "../../resource/DropShadow/Right.png"
+            fillMode: Image.Stretch
+            anchors{
+                right: parent.right
+                top: dropShadowTopRight.bottom
+                bottom: dropShadowRightBottom.top
+            }
+        }
+
+        Image {
+            height: 15
+            source: "../../resource/DropShadow/Bottom.png"
+            fillMode: Image.Stretch
+            anchors{
+                left: dropShadowLeftBottom.right
+                right: dropShadowRightBottom.left
+                bottom: parent.bottom
+            }
+        }
+
+        Image {
+            id: dropShadowLeftBottom
+            width: 24
+            height: 15
+            source: "../../resource/DropShadow/LeftBottom.png"
+            anchors{
+                left: parent.left
+                bottom: parent.bottom
+            }
+        }
+
+        Image {
+            id: dropShadowRightBottom
+            width: 24
+            height: 15
+            source: "../../resource/DropShadow/RightBottom.png"
+            anchors{
+                right: parent.right
+                bottom: parent.bottom
+            }
         }
     }
-
-    Image {
-        width: 562
-        height: rootRectangle.height
-        fillMode: Image.Stretch
-        source: "../../resource/image/DecodeWindowDropShadowMiddle.png"
-        anchors{
-            top: dropShadowTop.bottom
-            left: parent.left
-            right: parent.right
-            bottom: dropShadowBottom.top
-        }
-    }
-
 
     Rectangle{
         id: rootRectangle
-        width: 550
+        width: contentColumn.width
         height: contentColumn.height+150
         color: Config.backgroundColor
         radius: 10
         anchors{
-            top: dropShadowTop.top
+            top: parent.top
             topMargin: 6
             left: parent.left
             leftMargin: 6
@@ -188,7 +238,7 @@ Window {
             }
             MouseArea{
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton 
+                acceptedButtons: Qt.LeftButton //只处理鼠标左键
                 property point clickPos: "0,0"
                 onPressed: clickPos=Qt.point(mouse.x,mouse.y)
                 onPositionChanged: {
@@ -220,7 +270,7 @@ Window {
 
         Column{
             id: contentColumn
-            width: parent.width
+            width: decodeListView.width+20
             height: decodeListView.height+1
             spacing: 10
             anchors{
@@ -231,17 +281,17 @@ Window {
             }
             Column{
                 height: contentColumn.height
-                width: parent.width-20
+                width: decodeListView.width
                 spacing: 0
 
                 DecodeListView{
                     id: decodeListView
                     height: contentHeight>400?400:contentHeight
-                    width: parent.width
+                    width: contentWidth
                     model: ListModel{
                         id: decodeViewModel
                     }
-                    availableChannels_: availableChannels
+                    channels_: channels
                     onDataChanged: isChanged=true;
                 }
 
@@ -276,7 +326,7 @@ Window {
                 width: parent.width
                 spacing: 0
                 Row{
-                    width: parent.width/2
+                    width: 200
                     spacing: 10
                     QComboBox{
                         id: vernierStartComboBox
@@ -397,6 +447,16 @@ Window {
             showSelectChannel=true;
             return;
         }
+        let decodeName=decodeData["main"]["first"];
+        if(decodeData["main"]["second"] && decodeData["main"]["second"].length>0)
+            decodeName=decodeData["main"]["second"][decodeData["main"]["second"].length-1];
+
+        if(!decodeData["main"]["height"] && Setting.decodeConfig[decodeName] && Setting.decodeConfig[decodeName]["height"])
+            decodeData["main"]["height"]=Setting.decodeConfig[decodeName]["height"];
+
+        if(!decodeData["main"]["isLockRow"] && Setting.decodeConfig[decodeName] && Setting.decodeConfig[decodeName]["isLockRow"])
+            decodeData["main"]["isLockRow"]=Setting.decodeConfig[decodeName]["isLockRow"];
+
         decodeData["main"]["start"]=vernierStartComboBox.currentModelChildren["cost"].toString();
         decodeData["main"]["end"]=vernierEndComboBox.currentModelChildren["cost"].toString();
         decodeData["main"]["startName"]=vernierStartComboBox.currentModelChildren["showText"];
@@ -423,6 +483,7 @@ Window {
                 decodeListView.firstDecode=selectJson["name"];
             }
             else{
+                //过滤重复协议
                 for(var j=0;j<decodeViewModel.count;j++){
                     if(decodeViewModel.get(j)["name"]===name)
                         return

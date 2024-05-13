@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef DRAW_BACKGROUND_FLOOR_H
+﻿#ifndef DRAW_BACKGROUND_FLOOR_H
 #define DRAW_BACKGROUND_FLOOR_H
 
 #include <QQuickPaintedItem>
@@ -46,15 +30,18 @@ signals:
     void vernierCreateComplete();
     void getAdsorbChannelID(qint32 y);
     void vernierMoveState(bool isMove, qint32 id);
+    void crossChannelMeasureState(bool isStop);
+    void sendCrossChannelMeasurePosition(qint32 type, qint32 x, qint32 y, qint32 mouseY, qint64 position, bool isHit);
 
 private:
     Session* m_session=nullptr;
     QString m_sessionID="";
-    qint32 m_height=0;
-    qint32 m_width=0;
+    qint32 m_height=0;//通道高度，只读
+    qint32 m_width=0;//通道高度，只读
     QPoint m_mousePoint;
     QPoint m_oldPoint;
     qint32 m_selectVernierIndex=-1;
+    qint64 m_selectVernierPosition=0;
     QPoint m_zoomPoint,m_zoomPointEnd;
     Qt::MouseButton m_currentButton;
 
@@ -66,8 +53,11 @@ protected:
     void hoverLeaveEvent(QHoverEvent *event) override;
     void hoverMoveEvent(QHoverEvent *event) override;
 
+    //以下QML变量
 public:
     Q_INVOKABLE void init(QString sessionID);
+    Q_INVOKABLE void vernierCancelMove();
+    Q_INVOKABLE void setCrossChannelMeasureState(bool isStop);
 
     bool showCursor() const;
     void setShowCursor(bool newShowCursor);
@@ -95,6 +85,7 @@ private:
     bool m_vernierCreateModel=false;
     bool m_isExit=false;
     qint32 m_adsorbChannelID;
+    bool m_crossChannelMeasureState=false;
 
     Q_PROPERTY(bool showCursor READ showCursor WRITE setShowCursor NOTIFY showCursorChanged)
     Q_PROPERTY(bool vernierCreateModel READ vernierCreateModel WRITE setVernierCreateModel NOTIFY vernierCreateModelChanged)
@@ -102,4 +93,4 @@ private:
     Q_PROPERTY(bool isExit READ isExit WRITE setIsExit NOTIFY isExitChanged)
 };
 
-#endif 
+#endif // DRAW_BACKGROUND_FLOOR_H

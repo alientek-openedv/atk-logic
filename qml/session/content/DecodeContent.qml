@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../../config"
 import "../../style"
@@ -31,10 +15,23 @@ Rectangle {
         id: decodeRefreshTimer
         interval: 200
         onTriggered: {
+            if(decodeTableModel.isStop())
+                return;
             decodeTableModel.refresh();
             sSignal.channelRefresh(-2);
         }
     }
+
+    Timer{
+        id: initDecodeTimer
+        interval: 500
+        onTriggered: {
+            if(!controller.isGlitchRemoval())
+                controller.startDecodeTmp();
+        }
+    }
+
+    Component.onCompleted: initDecodeTimer.start();
 
     Connections{
         target: controller
@@ -56,19 +53,29 @@ Rectangle {
 
         function onAppendDecode(json) {
             let js=JSON.parse(json);
+            if(typeof(js["decodeJson"])!=="undefined")
+                js=js["decodeJson"];
             delete js.main.decodeID;
             dataListView.resetScrollBarPosition();
             jsonStart(js);
         }
 
         function onSendDecodeReset(decodeID){
-            if(sConfig.selectDecodeID===decodeID)
+            if(sConfig.selectDecodeID===decodeID){
                 decodeTableModel.resetSort();
+                decodeTableModel.setStop(false);
+            }
         }
     }
 
     Connections{
         target: sSignal
+
+        function onCloseAllPopup(){
+            decodeMenuPopup.close();
+            decodeDataSearchPopup.close();
+            decodeSearchPopup.close();
+        }
 
         function onRemoveAllDecode(){
             decodeTableModel.stopAll(true);
@@ -86,7 +93,8 @@ Rectangle {
                         vernierListModel.removeBusy(item.decodeJson["main"]["startID"],decodeID,0);
                         vernierListModel.removeBusy(item.decodeJson["main"]["endID"],decodeID,1);
                         decodeListModel.remove(i);
-                        sConfig.decodeJson.splice(i,1)
+                        sSettings.decodeJson.splice(i,1)
+                        sSettings.save();
                         break;
                     }
                 }
@@ -117,7 +125,9 @@ Rectangle {
                 var item=decodeListModel.get(i);
                 if(item.decodeID===decodeID){
                     item.decodeJson=decodeJson;
-                    sConfig.decodeJson[i]["decodeJson"]=decodeJson;
+                    sSettings.decodeJson[i]["decodeJson"]=decodeJson;
+                    sSettings.save();
+                    break;
                 }
             }
             controller.setDecodeShowJson(decodeID,decodeJson);
@@ -135,7 +145,9 @@ Rectangle {
                         showText=decodeJson["main"]["second"][decodeJson["main"]["second"].length-1];
                     vernierListModel.appendBusy(decodeJson["main"]["startID"],decodeID,0,showText+" - Start");
                     vernierListModel.appendBusy(decodeJson["main"]["endID"],decodeID,1,showText+" - End");
-                    sConfig.decodeJson[i]["decodeJson"]=decodeJson;
+                    sSettings.decodeJson[i]["decodeJson"]=decodeJson;
+                    sSettings.save();
+                    break;
                 }
             }
         }
@@ -174,7 +186,7 @@ Rectangle {
                 id: decodeTitleText
                 text: qsTr("协议")
                 font.pixelSize: 16
-                width: 240
+                width: parent.width
                 height: contentHeight
                 color: Config.textColor
                 ImageButton{
@@ -218,14 +230,6 @@ Rectangle {
                     topMargin: 10
                 }
                 Component.onCompleted: refReshShortcutButton();
-            }
-
-            Connections{
-                target: sConfig
-                function onIsRunChanged(){
-                    decodeMenuPopup.close();
-                    decodeDataSearchPopup.close();
-                }
             }
 
             QMenuPopup{
@@ -312,6 +316,8 @@ Rectangle {
                             verticalCenter: parent.verticalCenter
                             verticalCenterOffset: -5
                         }
+                        imageWidth: 2
+                        imageHeight: 12
                         imageSource: "resource/icon/"+Config.tp+"/More.png"
                         imageEnterSource: "resource/icon/"+Config.tp+"/MoreEnter.png"
                         imageDisableSource: "resource/icon/"+Config.tp+"/MoreDisable.png"
@@ -397,7 +403,7 @@ Rectangle {
                 }
                 QTextInput{
                     id: searchInput
-                    width: 198
+                    width: topColumn.width-66
                     height: parent.height
                     onShowTextChanged: {
                         if(showText)
@@ -408,11 +414,34 @@ Rectangle {
                         dataListView.resetScrollBarPosition();
                         dataListView.selectRow=-1;
                     }
+                    onContainsMouseChanged: sSignal.showSetTips(3,containsMouse);
+                }
+
+                ImageButton{
+                    id: bindButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    imageWidth: 16
+                    imageHeight: 14
+                    imageSource: "resource/icon/"+Config.tp+(sConfig.isBind?"/UnBind":"/Bind")+".png"
+                    imageEnterSource: "resource/icon/"+Config.tp+(sConfig.isBind?"/UnBind":"/Bind")+"Enter.png"
+                    imageDisableSource: "resource/icon/"+Config.tp+(sConfig.isBind?"/UnBind":"/Bind")+"Disable.png"
+                    enabled: decodeTableModel.isExport
+                    width: 16
+                    height: 16
+                    onPressed: sConfig.isBind=!sConfig.isBind
+                    QToolTip{
+                        parent: parent
+                        isShow: parent.containsMouse
+                        showText: sConfig.isBind? qsTr("取消跟随") : qsTr("视图跟随")
+                        direction: 2
+                    }
                 }
 
                 ImageButton{
                     id: exportButton
                     anchors.verticalCenter: parent.verticalCenter
+                    imageWidth: 16
+                    imageHeight: 14
                     imageSource: "resource/icon/"+Config.tp+"/ExportDecode.png"
                     imageEnterSource: "resource/icon/"+Config.tp+"/ExportDecodeEnter.png"
                     imageDisableSource: "resource/icon/"+Config.tp+"/ExportDecodeDisable.png"
@@ -432,8 +461,12 @@ Rectangle {
                 ImageButton{
                     id: searchMoreButton
                     anchors.verticalCenter: parent.verticalCenter
+                    imageWidth: 2
+                    imageHeight: 12
                     imageSource: "resource/icon/"+Config.tp+"/More.png"
                     imageEnterSource: "resource/icon/"+Config.tp+"/MoreEnter.png"
+                    imageDisableSource: "resource/icon/"+Config.tp+"/MoreDisable.png"
+                    enabled: decodeAddButton.enabled
                     width: 10
                     height: 16
                     onPressed: {
@@ -454,7 +487,7 @@ Rectangle {
                     headers: [qsTr("索引"),qsTr("开始"),qsTr("时间"),qsTr("类型"),qsTr("数据")]
                     onExportClicked: {
                         decodeTableModel.saveTableReady(checks);
-                        exportDialog.saveType=1;
+                        exportDialog.saveType=Config.SaveType.TableCSV;
                         exportDialog.open();
                         exportPopup.close();
                     }
@@ -505,7 +538,7 @@ Rectangle {
             left: parent.left
             right: parent.right
         }
-        columnsWidth: [67,67,67,67]
+        columnsWidth: [67,67,67,67]//总数=组件宽度(268)
         headerList: [qsTr("开始"),qsTr("时间"),qsTr("类型"),qsTr("数据")]
         view.model: decodeTableModel
     }
@@ -555,7 +588,7 @@ Rectangle {
     function jsonStart(decodeJson){
         dataListView.resetScrollBarPosition();
         var channelList=[];
-        for(var i in decodeJson){
+        for(let i in decodeJson){
             channelList=channelList.concat(jsonGetChannelList(decodeJson[i]["channels"]));
             channelList=channelList.concat(jsonGetChannelList(decodeJson[i]["opt_channels"]));
         }
@@ -564,7 +597,7 @@ Rectangle {
         if(decodeJson["main"]["decodeID"])
             sSignal.resetDecode(decodeJson["main"]["decodeID"],decodeJson,channelList,true);
         else{
-            if(channelList.length===1&&channelList[0]==="-")
+            if(channelList.length===1&&channelList[0]==="-" || channelList.length<0)
                 return;
             var decodeID=controller.newDecode();
             decodeJson["main"]["decodeID"]=decodeID;
@@ -575,11 +608,13 @@ Rectangle {
             decodeJson["main"]["showText"]=showText;
             if(controller.decode(decodeID, decodeJson)){
                 sConfig.decodeColorIndex++;
+                //添加busy信息
                 vernierListModel.appendBusy(decodeJson["main"]["startID"],decodeID,0,showText+" - Start");
                 vernierListModel.appendBusy(decodeJson["main"]["endID"],decodeID,1,showText+" - End");
                 decodeListModel.append({"dataValue":0,"decodeJson":decodeJson,"colorIndex":decodeJson["main"]["colorIndex"],
                                            "showText":showText,"decodeID":decodeID})
-                sConfig.decodeJson.push({"decodeJson":decodeJson,"decodeID":decodeID});
+                sSettings.decodeJson.push({"decodeJson":decodeJson,"decodeID":decodeID});
+                sSettings.save();
                 sSignal.decode(decodeID,decodeJson,channelList);
                 sConfig.selectDecodeID=decodeID;
                 var rowList=decodeTableModel.initShow(decodeID);
@@ -645,18 +680,17 @@ Rectangle {
         }
         lastDecode=decodeName;
         var component = Qt.createComponent("qrc:/qml/window/DecodeSetWindow.qml");
-        
+        //屏蔽关闭的通道
         let array=[];
         for(let i in sSettings.channelsSet){
-            if(!sSettings.channelsSet[i].enable)
+            if(sSettings.channelsSet[i].enable)
                 array.push(parseInt(i));
         }
-        array=sConfig.availableChannels.filter(item1 => !array.some(item2 => item2 === item1))
         if (component.status === Component.Ready){
             var subParams = {
                 "decodeJson": decodeJson,
                 "vernierJson": getVernierJson(),
-                "availableChannels": getChannelName(array),
+                "channels": getChannelName(array),
                 "screen": root.getScreenQRect(),
                 "initDecode": decodeName
             }
@@ -667,26 +701,22 @@ Rectangle {
     }
 
     function setDecodeWindow(selectJson){
-        
         var component = Qt.createComponent("qrc:/qml/window/DecodeSetWindow.qml");
-        
+        //屏蔽关闭的通道
         let array=[];
         for(let i in sSettings.channelsSet){
-            if(!sSettings.channelsSet[i].enable)
+            if(sSettings.channelsSet[i].enable)
                 array.push(parseInt(i));
         }
-        array=sConfig.availableChannels.filter(item1 => !array.some(item2 => item2 === item1))
         if (component.status === Component.Ready){
-            var list=[];
             for(let j=0; j<selectJson["main"]["channelList"].length;j++){
-                if(selectJson["main"]["channelList"][j].toString()!=="-")
-                    list.push(parseInt(selectJson["main"]["channelList"][j]))
+                if(selectJson["main"]["channelList"][j].toString()!=="-" && array.indexOf(parseInt(selectJson["main"]["channelList"][j]))===-1)
+                    array.push(parseInt(selectJson["main"]["channelList"][j]))
             }
-            array=array.concat(list).sort(function(a,b){return a-b})
             var subParams = {
                 "decodeJson": root.decodeJson["data"],
                 "vernierJson": getVernierJson(),
-                "availableChannels": getChannelName(array),
+                "channels": getChannelName(array),
                 "screen": root.getScreenQRect(),
                 "initJson": selectJson
             }
@@ -714,8 +744,8 @@ Rectangle {
         shortcutButtonRow.children=[];
         shortcutButtonList=[];
         for(i in sSettings.favoritesList){
-            if(typeof(sSettings.favoritesList[i])!=="undefined"){
-                var item =Qt.createQmlObject('import "../../style"; TextButton{text: "'+sSettings.favoritesList[i]+'"; isElide: true ; height: parent.height; textColor: "'+
+            if(typeof(sSettings.favoritesList[i])==="string"){
+                var item =Qt.createQmlObject('import "../../style"; TextButton{text: "'+sSettings.favoritesList[i]+'"; isElide: true ; height: parent?parent.height:0; textColor: "'+
                                              Config.iceBlue+'"; backgroundRectangle.radius: 10; enabled: decodeAddButton.enabled;backgroundRectangle.border.width: 1; backgroundRectangle.border.color: enabled ? "'+
                                              Config.iceBlue+'" : "'+Config.textDisabledColor+'"; onClicked: showDecodeWindow(text);}',shortcutButtonRow);
                 shortcutButtonList.push(item);
@@ -775,6 +805,7 @@ Rectangle {
             }else
                 decodeShowRowList[k]["isSelect"]=false;
         }
+        decodeTableModel.setStop(false);
         decodeTableModel.refresh();
         dataListView.resetScrollBarPosition();
     }

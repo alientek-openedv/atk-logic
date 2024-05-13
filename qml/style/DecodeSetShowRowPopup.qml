@@ -1,28 +1,13 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.13
+﻿import QtQuick 2.13
 import QtQuick.Controls 2.5
 import "../config"
 import "../style"
 
 Popup{
-    property int maxWidth: 160
+    property int maxWidth: 200
     property int rowHeight: 30
     property var decodeJson
+    property string decodeName
     id: mainPopup
     x: -contentWidth
     width: contentWidth
@@ -64,7 +49,7 @@ Popup{
             }
             delegate: Column{
                 id: showColumn
-                width: parent.width
+                width: parent?parent.width:0
                 height: row_header.height+row_listview.height
                 spacing: 0
                 Component.onCompleted: {
@@ -136,6 +121,32 @@ Popup{
                             }
                             onPressed: row_header.setAllRowState(true);
                         }
+                        ImageButton{
+                            width: 20
+                            height: 20
+                            anchors{
+                                verticalCenter: parent.verticalCenter
+                                right: allRowButton.left
+                                margins: 8
+                            }
+                            visible: index===0
+                            imageWidth: 15
+                            imageHeight: 15
+                            imageSource: decodeJson["main"]["isLockRow"]?"resource/icon/Lock.png":"resource/icon/UnLock.png"
+                            imageEnterSource: decodeJson["main"]["isLockRow"]?"resource/icon/LockEnter.png":"resource/icon/UnLockEnter.png"
+                            backgroundMouseEnterColor: Config.mouseCheckColor
+                            backgroundPressedColor: backgroundMouseEnterColor
+                            onPressed: {
+                                if(decodeJson["main"]["isLockRow"])
+                                    decodeJson["main"]["isLockRow"]=false;
+                                else
+                                    decodeJson["main"]["isLockRow"]=true;
+                                imageSource=decodeJson["main"]["isLockRow"]?"resource/icon/Lock.png":"resource/icon/UnLock.png";
+                                imageEnterSource=decodeJson["main"]["isLockRow"]?"resource/icon/LockEnter.png":"resource/icon/UnLockEnter.png";
+                                Signal.setDecodeConfig(decodeName, "isLockRow", decodeJson["main"]["isLockRow"]);
+                                sSignal.resetDecodeJson(decodeJson, decodeJson["main"]["decodeID"]);
+                            }
+                        }
                     }
                     function setAllRowState(isShow){
                         for(var i=0;i<row_model.count;i++){
@@ -178,6 +189,9 @@ Popup{
                             height: parent.height
                             Image {
                                 visible: isShow
+                                width: 10
+                                height: 8
+                                fillMode: Image.PreserveAspectFit
                                 source: "../../resource/icon/"+(rowItemMouseArea.containsMouse?"CheckedWhite.png":"Checked.png")
                                 anchors.verticalCenter: parent.verticalCenter
                                 anchors.horizontalCenter: parent.horizontalCenter

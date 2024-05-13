@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef DECODE_SERVICE_H
+﻿#ifndef DECODE_SERVICE_H
 #define DECODE_SERVICE_H
 
 
@@ -47,8 +31,8 @@ private:
 
 private:
     QJsonObject m_decodeJson;
-    QVector<atk_decoder*> m_decoderList;
-    QMap<QString, QString> m_decodeDoc;
+    QVector<atk_decoder*> m_decoderList;//全局解码库列表
+    QMap<QString, QString> m_decodeDoc; //解码库文档列表
 };
 
-#endif 
+#endif // DECODE_SERVICE_H

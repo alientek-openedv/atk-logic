@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 import "../style"
@@ -44,6 +28,8 @@ Rectangle {
     Image {
         anchors.centerIn: parent
         source: "../../resource/image/AboutUsDropShadow.png"
+        width: 506
+        height: mainRectangle.height+16
         Rectangle{
             id: mainRectangle
             width: 490
@@ -66,6 +52,8 @@ Rectangle {
             ImageButton{
                 width: 15
                 height: 15
+                imageWidth: 10
+                imageHeight: 10
                 imageSource: "resource/icon/MessageClose.png"
                 imageEnterSource: "resource/icon/MessageClose.png"
                 anchors{
@@ -157,7 +145,7 @@ Rectangle {
                 color: Config.subheadColor
                 anchors{
                     bottom: parent.bottom
-                    bottomMargin: 20
+                    bottomMargin: 15
                     horizontalCenter: parent.horizontalCenter
                 }
             }
@@ -165,7 +153,7 @@ Rectangle {
                 spacing: 10
                 anchors{
                     bottom: statementText.top
-                    bottomMargin: 2
+                    bottomMargin: 7
                     horizontalCenter: parent.horizontalCenter
                 }
                 QLineText{

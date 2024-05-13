@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtGraphicalEffects 1.15
@@ -26,13 +10,17 @@ Item {
     height: pickerRect.height+10+huePicker.height
 
     property alias cursorWidth: pickerRect.cursorWidth
+    property bool isAlpha: false
     readonly property color currentColor: pickerRect.currentColor
 
     function setColor(color) {
+        if(typeof(color)==="undefined")
+            return;
         pickerRect.transitionColor=color;
         hueSlider.x = (huePicker.width - hueSlider.width) * (Math.max(pickerRect.transitionColor.hsvHue, 0));
         colorPickerCursor.x = pickerRect.transitionColor.hsvSaturation * (pickerRect.width - cursorWidth);
         colorPickerCursor.y = (1.0 - pickerRect.transitionColor.hsvValue) * (pickerRect.height - cursorWidth);
+        pickerRect.alpha = pickerRect.transitionColor.a;
     }
 
     Item {
@@ -46,31 +34,32 @@ Item {
             let v = 1.0 - hueSlider.value;
 
             if (0.0 <= v && v < 0.16) {
-                return Qt.rgba(1.0, 0.0, v / 0.16, 1.0);
+                return Qt.rgba(1.0, 0.0, v / 0.16, alpha);
             } else if (0.16 <= v && v < 0.33) {
-                return Qt.rgba(1.0 - (v - 0.16) / 0.17, 0.0, 1.0, 1.0);
+                return Qt.rgba(1.0 - (v - 0.16) / 0.17, 0.0, 1.0, alpha);
             } else if (0.33 <= v && v < 0.5) {
-                return Qt.rgba(0.0, ((v - 0.33) / 0.17), 1.0, 1.0);
+                return Qt.rgba(0.0, ((v - 0.33) / 0.17), 1.0, alpha);
             } else if (0.5 <= v && v < 0.76) {
-                return Qt.rgba(0.0, 1.0, 1.0 - (v - 0.5) / 0.26, 1.0);
+                return Qt.rgba(0.0, 1.0, 1.0 - (v - 0.5) / 0.26, alpha);
             } else if (0.76 <= v && v < 0.85) {
-                return Qt.rgba((v - 0.76) / 0.09, 1.0, 0.0, 1.0);
+                return Qt.rgba((v - 0.76) / 0.09, 1.0, 0.0, alpha);
             } else if (0.85 <= v && v <= 1.0) {
-                return Qt.rgba(1.0, 1.0 - (v - 0.85) / 0.15, 0.0, 1.0);
+                return Qt.rgba(1.0, 1.0 - (v - 0.85) / 0.15, 0.0, alpha);
             } else {
                 return "red";
             }
         }
         property real saturation: colorPickerCursor.x / (width - cursorWidth)
         property real brightness: 1 - colorPickerCursor.y / (height - cursorWidth)
-        property color currentColor: Qt.hsva(hueSlider.value, saturation, brightness, 255)
+        property color currentColor: Qt.hsva(hueSlider.value, saturation, brightness, alpha)
         property color __color: Qt.rgba(0, 0, 0, 255)
+        property double alpha: 1.0
 
         function fromColor() {
             setColor(Qt.rgba(parseInt(redEditor.text) / 255.
                                         , parseInt(greenEditor.text) / 255.
                                         , parseInt(blueEditor.text) / 255.
-                                        , 255));
+                                        , isAlpha?parseInt(alphaEditor.text)/255:1));
         }
 
         function fromArgbColor() {
@@ -79,10 +68,18 @@ Item {
         }
 
         onCurrentColorChanged: {
+            alphaEditor.text = (alpha * 255).toFixed(0);
             redEditor.text = (currentColor.r * 255).toFixed(0);
             greenEditor.text = (currentColor.g * 255).toFixed(0);
             blueEditor.text = (currentColor.b * 255).toFixed(0);
-            argbEditor.text = currentColor.toString().replace("#", "");
+            if(isAlpha){
+                if(currentColor.toString().replace("#", "").length===8)
+                    argbEditor.text = currentColor.toString().replace("#", "");
+                else
+                    argbEditor.text = (alpha * 255).toString(16)+currentColor.toString().replace("#", "");
+            }
+            else
+                argbEditor.text = currentColor.toString().replace("#", "");
         }
 
         Rectangle {
@@ -224,9 +221,18 @@ Item {
 
     Column {
         anchors.top: previewItem.bottom
-        anchors.topMargin: 16
+        anchors.topMargin: 10
         anchors.left: previewItem.left
         spacing: 9
+
+        ColorEditor {
+            id: alphaEditor
+            label: "透明(A)"
+            visible: isAlpha
+            validator: IntValidator { top: 255; bottom: 0 }
+            onAccepted: pickerRect.fromColor();
+            onTabClick: argbEditor.active();
+        }
 
         ColorEditor {
             id: redEditor
@@ -255,7 +261,7 @@ Item {
         ColorEditor {
             id: argbEditor
             label: "十六进制(H)"
-            validator: RegularExpressionValidator { regularExpression: /[0-9a-fA-F]{0,6}/ }
+            validator: RegularExpressionValidator { regularExpression: /[0-9a-fA-F]{0,8}/ }
             onAccepted: pickerRect.fromArgbColor();
             onTabClick: redEditor.active();
         }

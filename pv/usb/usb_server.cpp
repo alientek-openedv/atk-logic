@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "usb_server.h"
+﻿#include "usb_server.h"
 
 USBServer::USBServer(qint32 channelCount) : m_channelCount(channelCount){}
 
@@ -65,13 +49,14 @@ USBControl* USBServer::PortGetUSB(int port) {
     return nullptr;
 }
 
-int USBServer::GetNewDevice() {
+int USBServer::GetNewDevice(QList<quint8> connectPort) {
     USBControl* usb = new USBControl();
     QList<FindData> data = usb->Find();
     int errorDevice=0;
     int index = -1;
     int port = -1;
 
+    //寻找未初始化的设备
     for (int i = 0; i < data.size(); i++) {
         bool isAdd = true;
         QMap<int, USBControl*>::const_iterator it = m_usbControl.constBegin();
@@ -84,7 +69,7 @@ int USBServer::GetNewDevice() {
             }
             ++it;
         }
-        if (isAdd) {
+        if (isAdd && !connectPort.contains(data[i].port)) {
             if (usb->Init(data[i].dev, data[i].context, m_channelCount, data[i].port)) {
                 m_usbControl.insert(data[i].port, usb);
                 port = data[i].port;
@@ -97,6 +82,7 @@ int USBServer::GetNewDevice() {
     if(errorDevice==data.size() && index==-1)
         m_lastError=usb->m_lastError;
 
+    //删除多余的设备
     for (int i = 0; i < data.size(); i++) {
         if (i != index)
             usb->Find_Free(data[i].dev);
@@ -109,7 +95,8 @@ int USBServer::GetNewDevice() {
 int USBServer::GetDeleteDevice()
 {
     QList<FindData> data = USBControl::Find();
-    int ret=-1;
+    int ret=-1;//返回连接中被删除的设备
+    //判断错误设备是否存在
     if(m_errorPort!=-1){
         bool errorDeviceExist=false;
         for (int i = 0; i < data.size(); i++) {
@@ -125,6 +112,7 @@ int USBServer::GetDeleteDevice()
             m_errorPort=-1;
         }
     }
+    //寻找已删除设备
     m_delete.clear();
     for (auto iter = m_usbPort.begin(); iter != m_usbPort.end(); iter++) {
         bool isExist = false;
@@ -155,6 +143,8 @@ int USBServer::GetDeleteDevice()
 
         }
     }
+
+    //删除多余的设备
     for (int i = 0; i < data.size(); i++)
         USBControl::Find_Free(data[i].dev);
     return ret;

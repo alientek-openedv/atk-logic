@@ -1,20 +1,11 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-
+﻿/* Copyright(c),广州星翼电子科技有限公司
+* All rights reserved.*
+* 文件名称：usbControl.h
+* 摘    要：usb协议控制层
+* 当前版本：1.0
+* 作    者：J(俊杰)
+* 完成日期：2022年7月14日
+*/
 
 #ifndef USB_CONTROL_H
 #define USB_CONTROL_H
@@ -56,8 +47,30 @@ public:
     void DeInit();
 
     QString ReadStr();
+
+    /// <summary>
+    /// 读取数据
+    /// </summary>
+    /// <param name="pData">数据指针</param>
+    /// <param name="iCount">读取次数，1次=512K，1以下则为无限读，直至没有数据</param>
+    /// <param name="timeOut">超时时间</param>
+    /// <param name="maxTransferSize">使用的缓冲区数</param>
+    /// <returns></returns>
     bool Read(Data_* pData, int iCount = -1, qint32 timeOut=150, qint32 maxTransferSize=READ_TRANSFER_LENGTH);
+
+    /// <summary>
+    /// 同步读取数据并且不进行转换，仅用与MCU通讯
+    /// </summary>
+    /// <param name="pData">数据指针</param>
+    /// <param name="len">读取长度，大于2048则开启自动转换</param>
+    /// <returns></returns>
     bool ReadSynchronous(Data_* pData, qint32 len=512);
+
+    /// <summary>
+    /// 读取数据一次最低2048
+    /// </summary>
+    /// <param name="pData">数据指针</param>
+    /// <returns></returns>
     bool ReadSingle(Data_* pData);
 
     int GetPort();
@@ -81,21 +94,25 @@ public:
     bool Exit();
 
 public:
-    int m_ThreadState = 0;
+    //Data_* m_lastData=nullptr;
+    int m_ThreadState = 0;//0=指令停止，1=正常，2=用户停止，3=异常断开
     QString m_SessionID;
-    qint32 m_ChannelCount = 0;
+    qint32 m_ChannelCount = 0;			/* 通道数 */
     qint32 m_mcuVersion = 0;
     qint32 m_fpgaVersion = 0;
+    qint16 m_deviceVersion = 0;
     bool m_busy=false;
     bool m_NoDevice=false;
     qint32 m_lastError=0;
-    
+    //qint32 m_SamplingFrequency = 0;	/* 采样频率kHz */
+
 private:
     bool Write(quint8* data, qint32 len);
     bool Write(quint8 code, quint8 data[], qint32 len, bool isWaitReply=false);
     bool SendToDevice(quint8* data, qint64 len);
     bool SendToMCU(quint8 *data, qint64 len);
-    
+    //bool WaitReply(quint8 code);
+
 private:
     QMutex m_lock;
     bool _m_isInit = false;
@@ -106,4 +123,4 @@ private:
     HANDLE hThread;
 };
 
-#endif 
+#endif // USBCONTROL_H

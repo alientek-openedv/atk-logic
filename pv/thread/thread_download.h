@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef THREAD_DOWNLOAD_H
+﻿#ifndef THREAD_DOWNLOAD_H
 #define THREAD_DOWNLOAD_H
 
 #include <QObject>
@@ -30,8 +14,10 @@
 #include <QEventLoop>
 #include <pv/usb/usb_server.h>
 #include <pv/static/log_help.h>
+#include <pv/static/data_service.h>
 
-extern int g_updataState;
+extern int g_updataState;//0=正常，1=更新完成
+extern int g_isUpdata;//0=无升级，1=升级中，2=升级完成
 
 enum Status
 {
@@ -44,7 +30,7 @@ class ThreadDownload : public QObject
 {
     Q_OBJECT
 public:
-    explicit ThreadDownload(USBServer* usbServer, USBControl* usb, QObject *parent = nullptr);
+    explicit ThreadDownload(USBServer* usbServer, USBControl* usb, QString path, QObject *parent = nullptr);
     ~ThreadDownload();
     void startDownload(qint32 index);
     void startUpdate();
@@ -59,7 +45,7 @@ signals:
     void SendDownloadSchedule(qint32 schedule, qint32 type, qint32 index);
 
 public slots:
-    void onEnterBootloader(qint32 port);
+    void onEnterBootloader(qint32 port, bool errorModel);
 
 private slots:
     void onDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
@@ -80,18 +66,14 @@ private:
 
     QString m_mcuURL;
     QString m_fpgaURL;
-
-    qint64 m_fileSize;
-    int m_statusCode=0;
-    qint64 m_downLoadedBytes;
-    qint64 m_currentLoadedBytes;
-
+    bool m_urlLock=false;
     QString m_fileName;
     QString m_url;
     Status m_state;
+    bool m_isErrorModel=false;
 
     QString m_path;
-    bool m_IsDownloading=false;
+    bool m_isDownloading=false;
     QFile m_file;
 };
 

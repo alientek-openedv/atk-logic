@@ -61,7 +61,7 @@
         <file>qml/style/MouseMeasurePopup.qml</file>
         <file>qml/window/GlitchRemovalSetWindow.qml</file>
         <file>qml/style/TestFileSelectPopup.qml</file>
-        <file>qml/style/UpdataPopup.qml</file>
+        <file>qml/style/UpdatePopup.qml</file>
         <file>qml/window/SetWindow.qml</file>
         <file>qml/window/LoadingWindow.qml</file>
         <file>qml/style/DecodeSearchPopup.qml</file>
@@ -74,5 +74,10 @@
         <file>qml/style/LiveFollowingPopup.qml</file>
         <file>qml/style/SearchDataTableView.qml</file>
         <file>qml/style/ExportPopup.qml</file>
+        <file>qml/window/DecodeLogWindow.qml</file>
+        <file>qml/style/QDistanceView.qml</file>
+        <file>qml/style/ExportBinPopup.qml</file>
+        <file>qml/style/ColorPickerPopup.qml</file>
+        <file>qml/style/ColorPickerButton.qml</file>
     </qresource>
 </RCC>

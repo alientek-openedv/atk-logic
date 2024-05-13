@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.11
+﻿import QtQuick 2.11
 import QtQuick.Window 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.3
@@ -29,7 +13,7 @@ Window {
     id: window
     visible: true
     modality: Qt.WindowModal
-    flags: Qt.Window | Qt.FramelessWindowHint
+    flags: Qt.FramelessWindowHint
     color: "#00000000"
     width: dropShadow.width
     height: dropShadow.height
@@ -44,14 +28,25 @@ Window {
 
     Component.onCompleted: {
         Config.isSetModel=true;
+        //常规
         set.collectZoom=Setting.collectZoom;
         set.jumpZoom=Setting.jumpZoom;
         set.closeHint=Setting.closeHint;
         set.viewToolPopup=Setting.viewToolPopup;
         set.componentWheelChanged=Setting.componentWheelChanged;
         set.showFPS=Setting.showFPS;
+        set.isMouseMeasure=Setting.isMouseMeasure;
+        set.isLinuxMemoryLimit=Setting.isLinuxMemoryLimit;
+
+        //样式
+        set.mouseMeasureBackColor=Setting.mouseMeasureBackColor;
+        set.mouseMeasureTextColor=Setting.mouseMeasureTextColor;
+
+        //快捷键
         keyModel.append({"showText":qsTr("开始采集"),"id":Config.ShortcutKey.StartCollecting,"key":Setting.startCollecting,"recodeKey":Setting.startCollecting,"isClash":false,"isOK":true});
         keyModel.append({"showText":qsTr("停止采集"),"id":Config.ShortcutKey.StopCollecting,"key":Setting.stopCollecting,"recodeKey":Setting.stopCollecting,"isClash":false,"isOK":true});
+        keyModel.append({"showText":qsTr("上一标签"),"id":Config.ShortcutKey.SwitchVernierUp,"key":Setting.switchVernierUp,"recodeKey":Setting.switchVernierUp,"isClash":false,"isOK":true});
+        keyModel.append({"showText":qsTr("下一标签"),"id":Config.ShortcutKey.SwitchVernierDown,"key":Setting.switchVernierDown,"recodeKey":Setting.switchVernierDown,"isClash":false,"isOK":true});
         keyModel.append({"showText":qsTr("参数测量"),"id":Config.ShortcutKey.ParameterMeasure,"key":Setting.parameterMeasure,"recodeKey":Setting.parameterMeasure,"isClash":false,"isOK":true});
         keyModel.append({"showText":qsTr("添加标签"),"id":Config.ShortcutKey.VernierCreate,"key":Setting.vernierCreate,"recodeKey":Setting.vernierCreate,"isClash":false,"isOK":true});
         keyModel.append({"showText":qsTr("上一页"),"id":Config.ShortcutKey.SwitchPageUp,"key":Setting.switchPageUp,"recodeKey":Setting.switchPageUp,"isClash":false,"isOK":true});
@@ -69,7 +64,12 @@ Window {
         keyModel.append({"showText":qsTr("标签测量"),"id":Config.ShortcutKey.LabelMeasurement,"key":Setting.labelMeasurement,"recodeKey":Setting.labelMeasurement,"isClash":false,"isOK":true});
         keyModel.append({"showText":qsTr("数据搜索"),"id":Config.ShortcutKey.DataSearch,"key":Setting.dataSearch,"recodeKey":Setting.dataSearch,"isClash":false,"isOK":true});
 
+        //decode
+        decodeLogLevel.currentIndex=Setting.decodeLogLevel;
+
         checkClash();
+        mouseMeasureBackColorButton.setColor(set.mouseMeasureBackColor);
+        mouseMeasureTextColorButton.setColor(set.mouseMeasureTextColor);
     }
 
     function checkClash(){
@@ -105,6 +105,10 @@ Window {
             return "F1";
         case Config.ShortcutKey.StopCollecting:
             return "F2";
+        case Config.ShortcutKey.SwitchVernierUp:
+            return "F3";
+        case Config.ShortcutKey.SwitchVernierDown:
+            return "F4";
         case Config.ShortcutKey.ParameterMeasure:
             return "Ctrl+G";
         case Config.ShortcutKey.VernierCreate:
@@ -143,13 +147,25 @@ Window {
 
     QtObject{
         id: set
-        property bool collectZoom: false
-        property bool jumpZoom: false
-        property bool closeHint: false
-        property bool viewToolPopup: false
-        property bool componentWheelChanged: false
-        property bool showFPS: false
+        //选项
+        property bool collectZoom: false            //采集完成后是否缩放至全屏
+        property bool jumpZoom: false               //跳转功能是否自适应缩放界面
+        property bool closeHint: false              //关闭软件是否提示保存数据
+        property bool viewToolPopup: false          //视图工具悬浮窗
+        property bool componentWheelChanged: false  //组件滚动修改属性
+        property bool showFPS: false                //显示FPS
+        property bool isMouseMeasure: true          //是否使用鼠标测量
+        property bool isLinuxMemoryLimit: true      //是否限制ubuntu内存使用
+
+        //样式
+        property color mouseMeasureBackColor: "#ddbcedff"//鼠标悬浮窗背景色
+        property color mouseMeasureTextColor: "#383838"//鼠标悬浮窗文字色
     }
+
+    //    //@----disable-check M16
+    //    onClosing: function(closeevent){
+    //        dataSend("123456");
+    //    }
 
     function setShowEditText(json){
         var showText='<style type="text/css">body{line-height:1.2}</style><body>';
@@ -171,15 +187,26 @@ Window {
         set.viewToolPopup=true;
         set.componentWheelChanged=true;
         set.showFPS=false;
+        set.isMouseMeasure=true;
+        set.isLinuxMemoryLimit=true;
     }
 
     function confirm(){
+        //选项
         Setting.collectZoom=set.collectZoom;
         Setting.jumpZoom=set.jumpZoom;
         Setting.closeHint=set.closeHint;
         Setting.viewToolPopup=set.viewToolPopup;
         Setting.componentWheelChanged=set.componentWheelChanged;
         Setting.showFPS=set.showFPS;
+        Setting.isMouseMeasure=set.isMouseMeasure;
+        Setting.isLinuxMemoryLimit=set.isLinuxMemoryLimit;
+
+        //样式
+        Setting.mouseMeasureBackColor=set.mouseMeasureBackColor;
+        Setting.mouseMeasureTextColor=set.mouseMeasureTextColor;
+
+        //快捷键
         for(let i=0;i<keyModel.count;i++){
             let item=keyModel.get(i);
             switch(item.id){
@@ -188,6 +215,12 @@ Window {
                 break;
             case Config.ShortcutKey.StopCollecting:
                 Setting.stopCollecting=(item.isClash||!item.isOK)?"":item.key;
+                break;
+            case Config.ShortcutKey.SwitchVernierUp:
+                Setting.switchVernierUp=(item.isClash||!item.isOK)?"":item.key;
+                break;
+            case Config.ShortcutKey.SwitchVernierDown:
+                Setting.switchVernierDown=(item.isClash||!item.isOK)?"":item.key;
                 break;
             case Config.ShortcutKey.ParameterMeasure:
                 Setting.parameterMeasure=(item.isClash||!item.isOK)?"":item.key;
@@ -239,11 +272,17 @@ Window {
                 break;
             }
         }
+
+        //decode
+        Setting.decodeLogLevel=decodeLogLevel.currentIndex;
+        root.setDecodeLogLevel(Setting.decodeLogLevel);
+
         Setting.save();
     }
 
     Connections{
         target: root
+
         function onSendDownloadSchedule(schedule, type, index){
             downloadProgressBar.value=schedule;
             downloadProgressColumn.visible=true;
@@ -295,7 +334,7 @@ Window {
                 }
                 MouseArea{
                     anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton 
+                    acceptedButtons: Qt.LeftButton //只处理鼠标左键
                     property point clickPos: "0,0"
                     onPressed: clickPos=Qt.point(mouse.x,mouse.y)
                     onPositionChanged: {
@@ -339,7 +378,7 @@ Window {
 
                 Rectangle{
                     id: selectListRectangle
-                    width: 76
+                    width: 86
                     height: parent.height
                     color: rootRectangle.color
                     border{
@@ -360,13 +399,17 @@ Window {
                         clip: true
                         model: ListModel{
                             ListElement { showText: qsTr("常规"); }
+                            ListElement { showText: qsTr("样式"); }
                             ListElement { showText: qsTr("快捷键"); }
+                            ListElement { showText: qsTr("协议解码"); }
                         }
                         delegate: Rectangle{
                             width: selectList.width
                             height: 24
                             color: index===selectList.currentIndex?Config.mouseCheckColor:"transparent"
                             Row{
+                                height: parent.height
+                                width: parent.width
                                 spacing: 3
                                 anchors{
                                     left: parent.left
@@ -376,6 +419,7 @@ Window {
                                     text: showText
                                     font.pixelSize: 14
                                     color: index===selectList.currentIndex?"white":Config.textColor
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
 
@@ -400,7 +444,7 @@ Window {
                         bottom: parent.bottom
                     }
                     clip: true
-                    
+                    //常规
                     Column{
                         width: parent.width
                         height: parent.height
@@ -418,7 +462,7 @@ Window {
                         }
                         Rectangle{
                             width: parent.width
-                            height: 25*6
+                            height: 24*(windowType===2?8:7)
                             color: rootRectangle.color
                             border{
                                 width: 1
@@ -482,6 +526,29 @@ Window {
                                     isCheck: set.showFPS
                                     onClicked_: set.showFPS=!isCheck
                                 }
+                                QCheckBox{
+                                    buttonText: qsTr("显示鼠标测量浮窗")
+                                    fontPixelSize: 14
+                                    textVerticalCenterOffset: -2
+                                    autoCheck: false
+                                    isCheck: set.isMouseMeasure
+                                    onClicked_: set.isMouseMeasure=!isCheck
+                                }
+                                QCheckBox{
+                                    buttonText: qsTr("Ubuntu内存限制")
+                                    fontPixelSize: 14
+                                    textVerticalCenterOffset: -2
+                                    autoCheck: false
+                                    visible: windowType===2
+                                    isCheck: set.isLinuxMemoryLimit
+                                    onClicked_: set.isLinuxMemoryLimit=!isCheck
+                                    QToolTip{
+                                        parent: parent
+                                        isShow: parent.containsMouse
+                                        direction: 2
+                                        showText: qsTr("如果关闭内存限制，则不检查内存余量\n如果内存不足则会导致系统卡死等问题。")
+                                    }
+                                }
                             }
                         }
                         TextButton{
@@ -491,19 +558,78 @@ Window {
                             textEnterColor: textColor
                             textDisableColor: Config.setKeysButtonDisableText
                             backgroundColor: Config.borderLineColor
-                            backgroundEnterColor: backgroundColor
-                            backgroundPressedColor: backgroundColor
+                            backgroundEnterColor: Config.mouseCheckColor
+                            backgroundPressedColor: backgroundEnterColor
                             backgroundDisableColor: Config.setKeysInputBackground
                             onPressed: resetSet();
                         }
                     }
-                    
+                    //样式
+                    Column{
+                        width: parent.width
+                        height: parent.height
+                        spacing: 10
+                        Item {
+                            height: 19
+                            width: parent.width
+                            Text {
+                                text: qsTr("鼠标测量浮窗")
+                                color: Config.textColor
+                                font.pixelSize: 12
+                                anchors.bottom: parent.bottom
+                                verticalAlignment: Text.AlignBottom
+                            }
+                        }
+                        Rectangle{
+                            width: parent.width
+                            height: 1
+                            color: Config.lineColor
+                        }
+                        Row{
+                            width: parent.width
+                            height: 35
+                            spacing: 10
+                            Row{
+                                spacing: 4
+                                Text {
+                                    text: qsTr("背景颜色：")
+                                    color: Config.textColor
+                                    font.pixelSize: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                ColorPickerButton{
+                                    id: mouseMeasureBackColorButton
+                                    isAlpha: true
+                                    onPopupClose: set.mouseMeasureBackColor=currentColor;
+                                    popupX: -20
+                                    popupY: 38
+                                }
+                            }
+                            Row{
+                                spacing: 4
+                                Text {
+                                    text: qsTr("文字颜色：")
+                                    color: Config.textColor
+                                    font.pixelSize: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                ColorPickerButton{
+                                    id: mouseMeasureTextColorButton
+                                    isAlpha: true
+                                    onPopupClose: set.mouseMeasureTextColor=currentColor;
+                                    popupX: -119
+                                    popupY: 38
+                                }
+                            }
+                        }
+                    }
+                    //快捷键
                     Item{
                         width: parent.width
                         height: parent.height
                         MouseArea{
                             anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton 
+                            acceptedButtons: Qt.LeftButton //只处理鼠标左键
                             onPressed: parent.focus=true;
                             z:1
                         }
@@ -612,10 +738,10 @@ Window {
                                             Text {
                                                 id: textShow
                                                 width: 146
-                                                height: parent.height-1
                                                 text: showText
-                                                font.pixelSize: 14
+                                                font.pixelSize: 13
                                                 color: index===keysListView.select?"white":Config.textColor
+                                                anchors.verticalCenter: parent.verticalCenter
                                             }
                                             QTextInput{
                                                 property int count: 0
@@ -756,6 +882,7 @@ Window {
                                                 Image{
                                                     width: 14
                                                     height: 12
+                                                    fillMode: Image.PreserveAspectFit
                                                     source: "../../resource/icon/Warning_triangle_small.png"
                                                     visible: isClash
                                                     anchors{
@@ -896,6 +1023,9 @@ Window {
                                         width: 22
                                         height: parent.height
                                         Image {
+                                            width: 20
+                                            height: 18
+                                            fillMode: Image.PreserveAspectFit
                                             source: "../../resource/icon/Warning_triangle.png"
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
@@ -910,7 +1040,102 @@ Window {
                             }
                         }
                     }
-
+                    //协议解码
+                    Item{
+                        width: parent.width
+                        height: parent.height
+                        Column{
+                            width: parent.width
+                            height: parent.height
+                            spacing: 10
+                            Item {
+                                height: 19
+                                width: parent.width
+                                Text {
+                                    text: qsTr("选项")
+                                    color: Config.textColor
+                                    font.pixelSize: 12
+                                    anchors.bottom: parent.bottom
+                                    verticalAlignment: Text.AlignBottom
+                                }
+                            }
+                            Rectangle{
+                                width: parent.width
+                                height: 1
+                                color: Config.lineColor
+                            }
+                            Row{
+                                spacing: 10
+                                Row{
+                                    spacing: 5
+                                    Text {
+                                        text: qsTr("解码器日志等级")
+                                        font.pixelSize: 12
+                                        color: Config.textColor
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    QComboBox{
+                                        id: decodeLogLevel
+                                        width: 90
+                                        model: ListModel{
+                                            ListElement { showText: "None"; cost: 0 }
+                                            ListElement { showText: "Error"; cost: 1 }
+                                            ListElement { showText: "Warning"; cost: 2 }
+                                            ListElement { showText: "Info"; cost: 3 }
+                                            ListElement { showText: "Debug"; cost: 4 }
+                                            ListElement { showText: "Spew"; cost: 5 }
+                                        }
+                                    }
+                                }
+                            }
+                            Item {
+                                height: 19
+                                width: parent.width
+                                Text {
+                                    text: qsTr("功能")
+                                    color: Config.textColor
+                                    font.pixelSize: 12
+                                    anchors.bottom: parent.bottom
+                                    verticalAlignment: Text.AlignBottom
+                                }
+                            }
+                            Rectangle{
+                                width: parent.width
+                                height: 1
+                                color: Config.lineColor
+                            }
+                            Row{
+                                spacing: 10
+                                TextButton{
+                                    text: qsTr("重新加载协议库")
+                                    height: 30
+                                    textColor: "white"
+                                    textEnterColor: textColor
+                                    textDisableColor: Config.setKeysButtonDisableText
+                                    backgroundColor: Config.borderLineColor
+                                    backgroundEnterColor: Config.mouseCheckColor
+                                    backgroundPressedColor: backgroundEnterColor
+                                    backgroundDisableColor: Config.setKeysInputBackground
+                                    onPressed: root.reloadDecoder(Setting.decodeLogLevel);
+                                }
+                                TextButton{
+                                    text: qsTr("调试日志")
+                                    height: 30
+                                    textColor: "white"
+                                    textEnterColor: textColor
+                                    textDisableColor: Config.setKeysButtonDisableText
+                                    backgroundColor: Config.borderLineColor
+                                    backgroundEnterColor: Config.mouseCheckColor
+                                    backgroundPressedColor: backgroundEnterColor
+                                    backgroundDisableColor: Config.setKeysInputBackground
+                                    onPressed: {
+                                        root.showDecodeLogWindow();
+                                        close_();
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

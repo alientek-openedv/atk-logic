@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../../config"
 import "../../style"
@@ -72,6 +56,7 @@ Rectangle {
         drag.target: list_item_nest
         cursorShape: Qt.OpenHandCursor
         enabled: channelID>=0
+        //防止被view窃取事件
         preventStealing: true
         propagateComposedEvents: true
         onPressed: {
@@ -124,6 +109,7 @@ Rectangle {
                 }
             }
             var itemY=list_item_nest.y-list_view_nest.contentY;
+            //0 item是定位item，不能移动
             if(showIndex>1){
                 item=list_view_nest.itemAtIndex(showList[showIndex-1]);
                 targetY=item.y+item.height/2-list_view_nest.contentY;
@@ -139,6 +125,8 @@ Rectangle {
             if(showIndex!==showList.length-1 && !isSet){
                 item=list_view_nest.itemAtIndex(showList[showIndex+1]);
                 targetY=item.y+item.height/2-list_view_nest.contentY;
+                //                console.log(itemY+","+mouse_area.mouseY+","+targetY+","+(itemY+mouse_area.mouseY>targetY)+","+
+                //                            list_view_nest.y+","+list_view_nest.contentY);
                 if(itemY+mouse_area.mouseY>targetY){
                     for(i=0;i<showList[showIndex+1];i++)
                     {
@@ -152,6 +140,7 @@ Rectangle {
                     dataModelNest.move(index, showList[showIndex+1], 1);
                 }
             }
+            list_item_nest.x=0;//锁定不能x移动
             sSignal.sendChannelY(channelID,0,list_item_nest.y+list_item_nest.height-listviewParentItem.contentY+5)
         }
     }
@@ -204,6 +193,8 @@ Rectangle {
                     verticalAlignment: Qt.AlignVCenter
                     selectByMouse: true
                     selectionColor: Config.mouseCheckColor
+                    renderType: Text.NativeRendering
+                    antialiasing: false
                     color: Config.textColor
                     Keys.enabled: true
                     Keys.onPressed: {

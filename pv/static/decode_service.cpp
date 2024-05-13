@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#include "decode_service.h"
+﻿#include "decode_service.h"
 
 DecodeService::DecodeService()
 {
@@ -27,6 +11,7 @@ qint32 DecodeService::Init()
     if (l == NULL)
         return 3;
     else{
+        //初始化解码库列表
         decodeInit(l);
         return 0;
     }
@@ -51,6 +36,9 @@ void DecodeService::decodeInit(atk_GSList *data)
 {
     while(m_decodeJson.size()>0)
         m_decodeJson.erase(m_decodeJson.begin());
+    m_decoderList.clear();
+    m_decodeDoc.clear();
+
     QJsonArray arrayList;
     while(data != NULL) {
         atk_decoder* d = (atk_decoder*)data->data;
@@ -77,15 +65,21 @@ void DecodeService::decodeInit(atk_GSList *data)
             json["output"]=str;
             break;
         }
+        //添加到列表框
         m_decoderList.append(d);
         QString temp=atk_decoder_doc_get(d);
-        if(temp.at(0)=='\n')
-            temp=temp.right(temp.size()-1);
-        if(temp.right(1)=='\n')
-            temp=temp.left(temp.size()-1);
+        if(temp.size()>0){
+            if(temp.at(0)=='\n')
+                temp=temp.right(temp.size()-1);
+            if(temp.right(1)=='\n')
+                temp=temp.left(temp.size()-1);
+        }
         m_decodeDoc[d->id]=temp;
+
+        //是否一级解码器
         json["first"]=isFirst;
         {
+            //写入通道属性
             QJsonArray array;
             for (const atk_GSList* i = d->channels; i; i = i->next)
             {
@@ -99,6 +93,7 @@ void DecodeService::decodeInit(atk_GSList *data)
             json["channels"]=array;
         }
         {
+            //写入逻辑通道属性
             QJsonArray array;
             for (const atk_GSList* i = d->opt_channels; i; i = i->next)
             {
@@ -112,6 +107,7 @@ void DecodeService::decodeInit(atk_GSList *data)
             json["opt_channels"]=array;
         }
         {
+            //写入设置参数
             QJsonArray array;
             for (const atk_GSList* i = d->options; i; i = i->next)
             {
@@ -121,8 +117,10 @@ void DecodeService::decodeInit(atk_GSList *data)
                 json2["desc"]=opt->desc;
                 char* pstr=atk_get_gvariant_value(opt->def);
                 json2["type"]=atk_get_gvariant_type(opt->def);
+
                 json2["def"]=QString(pstr);
                 atk_get_gvariant_free(pstr);
+
                 if (opt->values)
                 {
                     QJsonArray array2;
@@ -141,6 +139,7 @@ void DecodeService::decodeInit(atk_GSList *data)
             json["options"]=array;
         }
         {
+            //写入回调标识
             QJsonArray array;
             for (const atk_GSList* i = d->annotations; i; i = i->next)
             {
@@ -153,6 +152,7 @@ void DecodeService::decodeInit(atk_GSList *data)
             json["annotations"]=array;
         }
         {
+            //写入回调行
             QJsonArray array;
             for (const atk_GSList* i = d->annotation_rows; i; i = i->next)
             {

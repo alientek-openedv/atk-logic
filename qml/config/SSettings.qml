@@ -1,33 +1,19 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import atk.qml.Controls 1.0
 
 QSetting {
     fileName: tempDir+"/set.ini"
-    property bool isFirst: false
-    property bool isInstantly: false
-    property bool isOne: true
-    property bool isSimpleTrigger: true
-    property var channelsSet:[]
-    property var settingData:{"triggerPosition":1}
-    property var pwmData:[]
-    property var favoritesList: []
-    property var channelsDataColor: []
-    property int channelHeightMultiple: 1
-    property bool isMouseMeasure: true
+    property bool isFirst: false//是否首次运行
+    property bool isInstantly: false//是否立即采集
+    property bool isOne: true//是否单次采集
+    property bool isSimpleTrigger: true//是否简单触发
+    property var channelsSet:[]//简单触发所有通道json数据
+    property var settingData:{"triggerPosition":1}//设置指令数据
+    property var pwmData:[];//pwm波设置
+    property var favoritesList: []//收藏协议
+    property var channelsDataColor: []//通道默认颜色
+    property var channelsHeight: []
+    property int channelHeightMultiple: 1//通道显示高度倍率
+    property var decodeJson: []//已经打开的协议
+    property var glitchRemoval: []
 }

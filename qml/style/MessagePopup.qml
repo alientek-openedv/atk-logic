@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import "../config"
 
 Rectangle {
@@ -76,6 +60,7 @@ Rectangle {
         Image {
             width: 16
             height: 16
+            fillMode: Image.PreserveAspectFit
             source: "../../resource/icon/"+(type===0?set.complete?"Complete.png":"Info.png":(type===3||type===5)?"Info.png":"Error.png")
             anchors{
                 top: parent.top
@@ -106,6 +91,8 @@ Rectangle {
         id: closeButton
         width: 10
         height: 10
+        imageWidth: 8
+        imageHeight: 8
         imageSource: "resource/icon/"+Config.tp+"/Close_small.png"
         imageEnterSource: imageSource
         anchors{

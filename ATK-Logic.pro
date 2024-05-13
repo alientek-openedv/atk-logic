@@ -3,10 +3,16 @@ QT += core gui quick network gui-private widgets
 CONFIG += c++11
 CONFIG += precompile_header
 CONFIG += thread exceptions rtti stl
+CONFIG += debug_and_release
 
 TARGET = ATK-Logic
 
 PRECOMPILED_HEADER = $$PWD/stdafx.h
+
+VERSION = 1.0.6.6
+DEFINES += APP_VERSION_NUM=1066
+DEFINES += APP_VERSION=\\\"$$VERSION\\\"
+DEFINES += FPGA_MIN_VERSION_NUM=115
 
 QMAKE_TARGET_COMPANY ="ALIENTEK"
 QMAKE_TARGET_DESCRIPTION = "ATK-LogicView"
@@ -40,7 +46,9 @@ SOURCES += \
         pv/static/clipboard.cpp \
         pv/static/decode_service.cpp \
         pv/static/fpsitem.cpp \
-    pv/static/log_help.cpp \
+        pv/static/log_help.cpp \
+        pv/static/menustyle.cpp \
+        pv/static/shared_memory_helper.cpp \
         pv/static/shortcut_listener.cpp \
         pv/static/util.cpp \
         pv/static/data_service.cpp \
@@ -53,14 +61,17 @@ SOURCES += \
         pv/draw/draw_channel.cpp \
         pv/draw/draw_channel_header.cpp \
         pv/static/window_error.cpp \
+        pv/static/zip_helper.cpp \
         pv/thread/connect.cpp \
+        pv/thread/sharedthread.cpp \
         pv/thread/thread_download.cpp \
         pv/thread/thread_read.cpp \
         pv/thread/thread_work.cpp \
-    pv/usb/usb_base.cpp \
-    pv/usb/usb_control.cpp \
-    pv/usb/usb_hotplug.cpp \
-    pv/usb/usb_server.cpp
+        pv/usb/usb_base.cpp \
+        pv/usb/usb_control.cpp \
+        pv/usb/usb_hotplug.cpp \
+        pv/usb/usb_server.cpp \
+        pv/utils/qtlockedfile/qtlockedfile.cpp
 
 HEADERS += \
         lib/include/atk_decoder.h \
@@ -81,6 +92,8 @@ HEADERS += \
         pv/static/decode_service.h \
         pv/static/fpsitem.h \
         pv/static/log_help.h \
+        pv/static/menustyle.h \
+        pv/static/shared_memory_helper.h \
         pv/static/shortcut_listener.h \
         pv/static/util.h \
         pv/static/data_service.h \
@@ -93,18 +106,22 @@ HEADERS += \
         pv/draw/draw_channel.h \
         pv/draw/draw_channel_header.h \
         pv/static/window_error.h \
+        pv/static/zip_helper.h \
         pv/thread/connect.h \
+        pv/thread/sharedthread.h \
         pv/thread/thread_download.h \
         pv/thread/thread_read.h \
         pv/thread/thread_work.h \
-    pv/usb/usb_base.h \
-    pv/usb/usb_control.h \
-    pv/usb/usb_hotplug.h \
-    pv/usb/usb_server.h
+        pv/usb/usb_base.h \
+        pv/usb/usb_control.h \
+        pv/usb/usb_hotplug.h \
+        pv/usb/usb_server.h \
+        pv/utils/qtlockedfile/qtlockedfile.h
 
 win32 {
-    QMAKE_POST_LINK += xcopy /s /y \"$$SRC_DIR_DLL\" \"$$DST_DIR_DLL\"
-}
+        QMAKE_CXXFLAGS += /utf-8
+        QMAKE_POST_LINK += xcopy /s /y \"$$SRC_DIR_DLL\" \"$$DST_DIR_DLL\"
+    }
 
 RESOURCES += qml.qrc \
     resource.qrc
@@ -113,6 +130,8 @@ TRANSLATIONS += \
     translations/zh_CN.ts \
     translations/en_US.ts
 
+
+CONFIG += resources_big
 CONFIG += lrelease
 CONFIG += embed_translations
 # Additional import path used to resolve QML modules in Qt Creator's code model

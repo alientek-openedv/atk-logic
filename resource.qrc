@@ -11,14 +11,11 @@
         <file>resource/icon/Start.png</file>
         <file>resource/icon/Set.png</file>
         <file>resource/icon/SetActivate.png</file>
-        <file>resource/icon/Decode.png</file>
         <file>resource/icon/DecodeActivate.png</file>
         <file>resource/icon/Measure.png</file>
         <file>resource/icon/MeasureActivate.png</file>
         <file>resource/icon/Search.png</file>
         <file>resource/icon/SearchActivate.png</file>
-        <file>resource/icon/Trigger.png</file>
-        <file>resource/icon/TriggerActivate.png</file>
         <file>resource/image/check.png</file>
         <file>resource/icon/MessageClose.png</file>
         <file>resource/icon/Warning.png</file>
@@ -41,10 +38,8 @@
         <file>translations/zh_CN.qm</file>
         <file>resource/icon/Add.png</file>
         <file>resource/icon/DeleteEnter.png</file>
-        <file>resource/icon/Replace.png</file>
         <file>resource/icon/Fold.png</file>
         <file>resource/icon/Stop.png</file>
-        <file>resource/image/ChannelIcon.png</file>
         <file>resource/icon/icon.png</file>
         <file>resource/icon/SetZero.png</file>
         <file>resource/icon/LoopStart.png</file>
@@ -85,9 +80,6 @@
         <file>resource/image/SetWindowDropShadow.png</file>
         <file>resource/image/Loading_light.png</file>
         <file>resource/icon/DecodeSearch.png</file>
-        <file>resource/image/DecodeWindowDropShadowBottom.png</file>
-        <file>resource/image/DecodeWindowDropShadowMiddle.png</file>
-        <file>resource/image/DecodeWindowDropShadowTop.png</file>
         <file>resource/icon/StartDisable.png</file>
         <file>resource/icon/StartFile.png</file>
         <file>resource/icon/Warning_triangle_small.png</file>
@@ -246,5 +238,47 @@
         <file>resource/icon/light/ExportDecode.png</file>
         <file>resource/icon/light/ExportDecodeDisable.png</file>
         <file>resource/icon/light/ExportDecodeEnter.png</file>
+        <file>resource/DropShadow/Bottom.png</file>
+        <file>resource/DropShadow/Left.png</file>
+        <file>resource/DropShadow/LeftBottom.png</file>
+        <file>resource/DropShadow/Right.png</file>
+        <file>resource/DropShadow/RightBottom.png</file>
+        <file>resource/DropShadow/Top.png</file>
+        <file>resource/DropShadow/TopLeft.png</file>
+        <file>resource/DropShadow/TopRight.png</file>
+        <file>resource/icon/Decode.png</file>
+        <file>app.ico</file>
+        <file>logo.icns</file>
+        <file>resource/icon/Lock.png</file>
+        <file>resource/icon/LockEnter.png</file>
+        <file>resource/icon/UnLock.png</file>
+        <file>resource/icon/UnLockEnter.png</file>
+        <file>resource/icon/ExportBIN.png</file>
+        <file>resource/icon/dark/ExportBINDisable.png</file>
+        <file>resource/icon/light/ExportBINDisable.png</file>
+        <file>resource/update/update_x64.exe</file>
+        <file>resource/update/update_x86.exe</file>
+        <file>resource/icon/GlitchRemovalSelectAll.png</file>
+        <file>resource/icon/GlitchRemovalSelectAllEnter.png</file>
+        <file>resource/SourceHanSansCN-Regular.otf</file>
+        <file>resource/icon/dark/Bind.png</file>
+        <file>resource/icon/dark/BindDisable.png</file>
+        <file>resource/icon/dark/BindEnter.png</file>
+        <file>resource/icon/dark/UnBind.png</file>
+        <file>resource/icon/dark/UnBindDisable.png</file>
+        <file>resource/icon/dark/UnBindEnter.png</file>
+        <file>resource/icon/light/Bind.png</file>
+        <file>resource/icon/light/BindDisable.png</file>
+        <file>resource/icon/light/BindEnter.png</file>
+        <file>resource/icon/light/UnBind.png</file>
+        <file>resource/icon/light/UnBindDisable.png</file>
+        <file>resource/icon/light/UnBindEnter.png</file>
+        <file>resource/icon/dark/ProtocolSearchTip_en_US.png</file>
+        <file>resource/icon/dark/ProtocolSearchTip_zh_CN.png</file>
+        <file>resource/icon/light/ProtocolSearchTip_en_US.png</file>
+        <file>resource/icon/light/ProtocolSearchTip_zh_CN.png</file>
+        <file>resource/icon/DecodeMore.png</file>
+        <file>resource/image/ChannelIcon_en_US.png</file>
+        <file>resource/image/ChannelIcon_zh_CN.png</file>
     </qresource>
 </RCC>

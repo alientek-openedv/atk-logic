@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.11
+﻿import QtQuick 2.11
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -65,7 +49,7 @@ ListView {
                 width: parent.width
                 height: parent.height
                 Rectangle{
-                    property bool isContainsMouse: rowMouseArea.containsMouse||followButton.containsMouse||moreButton.containsMouse
+                    property bool isContainsMouse: rowMouseArea.containsMouse||deleteButton.containsMouse||moreButton.containsMouse
                     id: parentRectangle
                     width: parent.width
                     height: rowsHeight
@@ -77,10 +61,12 @@ ListView {
                             listView.selectIndex=-1;
                     }
                     ImageButton{
-                        id: followButton
+                        id: deleteButton
                         visible: parentRectangle.isContainsMouse&&listView.selectIndex===index
-                        imageSource: "resource/icon/DecodeFollow.png"
-                        imageEnterSource: "resource/icon/DecodeFollow.png"
+                        imageSource: "resource/icon/"+Config.tp+"/Delete.png"
+                        imageEnterSource: "resource/icon/DeleteEnter.png"
+                        imageWidth: 9
+                        imageHeight: 11
                         width: 16
                         height: 16
                         z: 5
@@ -89,26 +75,32 @@ ListView {
                             right: moreButton.left
                             rightMargin: 2
                         }
-                        onPressed: controller.showViewScope(position,position,!Setting.jumpZoom);
+                        onPressed: {
+                            sSignal.vernierCreate(2);
+                            vernierListModel.remove(vernierID);
+                        }
                     }
                     ImageButton{
                         id: moreButton
                         visible: parentRectangle.isContainsMouse
+                        imageWidth: 2
+                        imageHeight: 12
                         imageSource: "resource/icon/"+Config.tp+"/More.png"
                         imageEnterSource: "resource/icon/"+Config.tp+"/MoreEnter.png"
-                        width: 10
+                        width: 12
                         height: 16
                         z: 5
                         anchors{
                             verticalCenter: parent.verticalCenter
+                            verticalCenterOffset: -1
                             right: parent.right
                             rightMargin: vbar.visible?13:6
                         }
                         onPressed: menuPopup.visible=true
                     }
                     Connections{
-                        target: sConfig
-                        function onIsRunChanged(){
+                        target: sSignal
+                        function onCloseAllPopup(){
                             menuPopup.close();
                         }
                     }
@@ -125,7 +117,8 @@ ListView {
                                 controller.showViewScope(position,position,!Setting.jumpZoom);
                                 break;
                             case 1:
-                                vernierListModel.remove(vernierID)
+                                sSignal.vernierCreate(2);
+                                vernierListModel.remove(vernierID);
                                 break;
                             }
                         }
@@ -173,6 +166,7 @@ ListView {
                         Text {
                             text: name+" = "+positionStr
                             color: Config.textColor
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
                 }

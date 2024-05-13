@@ -1,28 +1,13 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
+
 import "./channel"
 import "../config"
 import "../style"
 
 Item{
     property alias model: dataModelNest
-    property var showList: []
+    property var showList: []//和heightList长度必须一样
     property alias list: list_view_nest
     id: mainNest
 
@@ -71,21 +56,17 @@ Item{
             if(typeof(decode)!="undefined"&&!decode["isDecode"]&&channelID>=0){
                 for(var i=0;i<dataModelNest.count;i++){
                     if(dataModelNest.get(i)["channelID"]===channelID){
-                        dataModelNest.get(i)["isDisable"]=isDisable;
-                        var index=-1;
-                        for(var j=0;j<sConfig.availableChannels.length;j++){
-                            if(sConfig.availableChannels[j]===channelID){
-                                index=j;
-                                break;
-                            }
-                        }
+                        var index=checkUseChannels(channelID);
                         if(isDisable){
-                            if(index!==-1)
-                                sConfig.availableChannels.splice(index,1);
+                            sConfig.useChannels.push(channelID);
+                            dataModelNest.get(i)["isDisable"]=isDisable;
                         }
-                        else if(index===-1)
-                            sConfig.availableChannels.push(channelID);
-                        sConfig.availableChannels.sort((x,y)=> x - y);
+                        else if(index!==-1){
+                            sConfig.useChannels.splice(index,1);
+                            if(checkUseChannels(channelID)===-1)
+                                dataModelNest.get(i)["isDisable"]=isDisable;
+                        }
+                        sConfig.useChannels.sort((x,y)=> x - y);
                         sSignal.refreshChannelHeight();
                         refReshHeight();
                         break;
@@ -136,6 +117,14 @@ Item{
     function refReshHeight(){
         if(!refReshHeightTimer.running)
             refReshHeightTimer.start();
+    }
+
+    function checkUseChannels(channelID){
+        for(var j=0;j<sConfig.useChannels.length;j++){
+            if(sConfig.useChannels[j]===channelID)
+                return j;
+        }
+        return -1;
     }
 }
 

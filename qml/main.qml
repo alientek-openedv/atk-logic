@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Window 2.15
 import QtQuick.Controls 2.5
 import QtQuick.Dialogs 1.3
@@ -32,19 +16,92 @@ FramelessWindow {
     minimumHeight: 550
     minimumWidth: 600
     color: "#00000000"
+    isLinuxMemoryLimit: Setting.isLinuxMemoryLimit;
+    rootDir: tempDir
 
     property int borderWidth: 4
     property color borderColor: "#01FFFFFF"
     property var loadingWindow
+    property bool settingIsInit: false
+    property var decodeLogWindow
 
     Component.onCompleted: {
         root.visible=false;
-        root.initLanguage();
-        Setting.init();
-        if(Setting.theme<0 || Setting.theme>1)
-        {
-            Setting.theme=0;
-            Setting.save();
+        initTimer.start();
+    }
+
+    Timer{
+        id: initTimer
+        interval: 10
+        onTriggered: {
+            while(true){
+                if(setRoot)
+                    break;
+            }
+            Setting.init();
+            if(Setting.theme<0 || Setting.theme>1)
+            {
+                Setting.theme=0;
+                Setting.save();
+            }
+            if(typeof(Setting.decodeConfig)==="undefined")
+                Setting.decodeConfig={};
+            if(Setting.decodeLogLevel<0 || Setting.decodeLogLevel>5)
+                Setting.decodeLogLevel=2;
+            root.setDecodeLogLevel(Setting.decodeLogLevel);
+            if(Setting.width<minimumWidth)
+                Setting.width=900;
+            if(Setting.height<minimumHeight)
+                Setting.width=650;
+            if(Setting.isSetWindow){
+                root.x=Setting.x;
+                root.y=Setting.y;
+                root.width=Setting.width;
+                root.height=Setting.height;
+                var rect=root.getScreenQRect();
+                if(root.width>rect.width)
+                    root.width=rect.width;
+                if(root.height>rect.height)
+                    root.height=rect.height;
+                if(root.x>rect.x+rect.width-root.width)
+                    root.x=rect.x+rect.width-root.width;
+                else if(root.x<rect.x)
+                    root.x=rect.x;
+                if(root.y>rect.y+rect.height-root.height)
+                    root.y=rect.y+rect.height-root.height;
+                else if(root.y<rect.y)
+                    root.y=rect.y;
+                if(Setting.windowState!==2)
+                    Setting.windowState=0;
+                if(Setting.windowState==2)
+                    root.showMaximized();
+            }
+            settingIsInit=true;
+            root.initLanguage();
+        }
+    }
+
+    Timer{
+        interval: 5000
+        repeat: true
+        running: true
+        onTriggered: {
+            if(settingIsInit){
+                Setting.isSetWindow=true;
+                if(root.windowState===0){
+                    Setting.width=root.width;
+                    Setting.height=root.height;
+                    Setting.x=root.x;
+                    Setting.y=root.y;
+                }
+                Setting.windowState=root.windowState;
+                Setting.save();
+            }
+            //清除日志记录
+            if(!decodeLogWindow || (decodeLogWindow && decodeLogWindow.visibility===0))
+                root.getDecodeLogList();
+
+            root.checkUpdateNow();
         }
     }
 
@@ -117,6 +174,20 @@ FramelessWindow {
             context: Qt.ApplicationShortcut
             sequence: Setting.stopCollecting
             onActivated: Signal.hotKey(Config.ShortcutKey.StopCollecting);
+        }
+
+        Shortcut {
+            enabled: !Config.isSetModel && Setting.switchVernierUp!==""
+            context: Qt.ApplicationShortcut
+            sequence: Setting.switchVernierUp
+            onActivated: Signal.hotKey(Config.ShortcutKey.SwitchVernierUp);
+        }
+
+        Shortcut {
+            enabled: !Config.isSetModel && Setting.switchVernierDown!==""
+            context: Qt.ApplicationShortcut
+            sequence: Setting.switchVernierDown
+            onActivated: Signal.hotKey(Config.ShortcutKey.SwitchVernierDown);
         }
 
         Shortcut {
@@ -242,11 +313,15 @@ FramelessWindow {
         onFocusOut: {
             Signal.focusOut();
             Config.isControlEnter=false;
+            Config.isAltEnter=false;
         }
 
         onKeyPress: {
             if(key===Qt.Key_Control)
                 Config.isControlEnter=true;
+            else if(key===Qt.Key_Delete)
+                Signal.hotKey(Config.ShortcutKey.DelVernierMeasure);
+//            console.log(["onKeyPress",key,Qt.Key_Delete])
         }
 
         onKeyRelease: {
@@ -280,19 +355,25 @@ FramelessWindow {
     }
 
     Platform.FileDialog {
-        property int saveType: 0
+        property int saveType: 0//0=导出数据，1=导出协议表格数据，2=保存atkdl，3=导出原始数据
         id: exportDialog
         title: qsTr("请选择导出文件路径")
         folder: Platform.StandardPaths.standardLocations(Platform.StandardPaths.DesktopLocation)[0]
         fileMode: Platform.FileDialog.SaveFile
-        nameFilters: ["CSV file (*.csv)"]
-        defaultSuffix: "csv"
+        nameFilters: saveType!==Config.SaveType.BinDATA?["CSV file (*.csv)"]:["BIN file (*.bin)"]
+        defaultSuffix: saveType!==Config.SaveType.BinDATA?"csv":"bin"
         onAccepted: {
-            if(exportDialog.file.toString().substring(exportDialog.file.toString().lastIndexOf(".")).toLowerCase()!==".csv")
+            let suffix=".csv"
+            if(saveType===Config.SaveType.BinDATA)
+                suffix=".bin"
+            if(exportDialog.file.toString().substring(exportDialog.file.toString().lastIndexOf(".")).toLowerCase()!==suffix)
                 Signal.showError(qsTr("请选择正确文件。"));
             else
             {
-                Signal.saveData(exportDialog.file,false,saveType);
+                if(saveType!==Config.SaveType.BinDATA)
+                    Signal.saveData(exportDialog.file,false,saveType,"");
+                else
+                    Signal.sendExportPath(exportDialog.file);
                 if(!Config.isFixed)
                     Signal.menuStateChanged(Config.MenuState.NoDisplay);
             }
@@ -311,7 +392,7 @@ FramelessWindow {
                 windowError.error_msg=qsTr("请选择正确文件。");
             else
             {
-                Signal.saveData(saveDialog.file,true,2);
+                Signal.saveData(saveDialog.file,true,Config.SaveType.ATKDL,"");
                 if(!Config.isFixed)
                     Signal.menuStateChanged(Config.MenuState.NoDisplay);
             }
@@ -329,6 +410,28 @@ FramelessWindow {
                 checkUpdate(parseInt(app_VERSION_NUM), false);
                 loadingCloseTimer.start();
                 root.initMethod();
+            }
+        }
+
+        function onSetDecodeConfig(decodeName, attributeName, data){
+            let deleteData;
+            switch(attributeName){
+            case "height":
+                deleteData=1;
+                break;
+            case "isLockRow":
+                deleteData=false;
+                break;
+            }
+            if(deleteData===data){
+                if(Setting.decodeConfig[decodeName] && Setting.decodeConfig[decodeName][attributeName])
+                    delete Setting.decodeConfig[decodeName][attributeName];
+                if(JSON.stringify(Setting.decodeConfig[decodeName])==="{}")
+                    delete Setting.decodeConfig[decodeName];
+            }else{
+                if(!Setting.decodeConfig[decodeName])
+                    Setting.decodeConfig[decodeName]={};
+                Setting.decodeConfig[decodeName][attributeName]=data;
             }
         }
     }
@@ -353,7 +456,7 @@ FramelessWindow {
     Loader{
         id: windowLoader
         anchors.fill: parent
-        asynchronous: true  
+        asynchronous: true  //异步加载会话
         onLoaded: {
             root.initSet(decode_init_code);
             root.createSession("Home", maxChannelNum, Config.SessionType.Demo, -1);
@@ -366,7 +469,9 @@ FramelessWindow {
         Rectangle{
             id: rootRectangle
             anchors.fill: parent
+            clip: true
             color: "transparent"
+
             Connections{
                 target: Signal
                 function onSetCursor(cursor)
@@ -391,14 +496,25 @@ FramelessWindow {
             Connections{
                 target: root
                 function onWindowState_Changed(){
+                    contentRectangle.refreshMargins();
+                }
+            }
+
+            //主体边框
+            Rectangle{
+                id: contentRectangle
+                color: "transparent"
+                radius: parent.radius
+                clip: true
+                Component.onCompleted: refreshMargins();
+
+                function refreshMargins(){
                     if(root.windowState===0||!root.isWindows())
                         contentRectangle.anchors.margins=0
                     else if(root.windowState===2)
                         contentRectangle.anchors.margins=8
                 }
-            }
-            Rectangle{
-                id: contentRectangle
+
                 border{
                     id: mainBorder
                     width: 1
@@ -419,8 +535,12 @@ FramelessWindow {
                     acceptedButtons: Qt.NoButton
                     z: 100
                 }
+
+                //主体
                 Rectangle{
-                    color: Config.backgroundColor
+                    color: "transparent"
+                    radius: parent.radius
+                    clip: true
                     anchors{
                         fill: parent
                         margins: mainBorder.width
@@ -456,17 +576,28 @@ FramelessWindow {
                                 Signal.showUpdateTag(false,false);
                                 if(state===2)
                                     windowError.error_msg=qsTr("检查更新失败，请检查网络连接。");
-                                else if(state===3)
+                                else if(state===3){
                                     Signal.showUpdateTag(false,true);
+                                    if(json["version"][0]!==Setting.notRemindVersion){
+                                        updatePopup.json=json;
+                                        updatePopup.url=url;
+                                        updatePopup.isUpdate=true;
+                                        updatePopup.isHardwareUpdate=false;
+                                        updatePopup.version=json["version"][0];
+                                        updatePopup.showNotRemindButton=true;
+                                        updatePopup.visible=true;
+                                    }
+                                }
                                 else
                                 {
                                     if(state!==0)
                                         Signal.showUpdateTag(false,true);
-                                    updataPopup.json=json;
-                                    updataPopup.url=url;
-                                    updataPopup.isUpdate=state===1;
-                                    updataPopup.isHardwareUpdate=false;
-                                    updataPopup.visible=true;
+                                    updatePopup.json=json;
+                                    updatePopup.url=url;
+                                    updatePopup.isUpdate=state===1;
+                                    updatePopup.isHardwareUpdate=false;
+                                    updatePopup.showNotRemindButton=false;
+                                    updatePopup.visible=true;
                                 }
                             }
 
@@ -481,8 +612,8 @@ FramelessWindow {
                             }
                         }
 
-                        UpdataPopup{
-                            id: updataPopup
+                        UpdatePopup{
+                            id: updatePopup
                             anchors{
                                 top: menuBar.bottom
                                 left: parent.left
@@ -495,7 +626,7 @@ FramelessWindow {
 
                         QMessageBox{
                             id: errorDialog
-                            anchors.fill: updataPopup
+                            anchors.fill: updatePopup
                             onVisibleChanged: {
                                 if(!visible)
                                     windowError.isClose=true
@@ -504,7 +635,7 @@ FramelessWindow {
 
                         AboutUs{
                             id: aboutUs
-                            anchors.fill: updataPopup
+                            anchors.fill: updatePopup
                         }
 
                         AMenuBar{
@@ -606,5 +737,21 @@ FramelessWindow {
 
     function jsonToString(json){
         return JSON.stringify(json);
+    }
+
+    function showDecodeLogWindow(){
+        if(!decodeLogWindow){
+            var component = Qt.createComponent("qrc:/qml/window/DecodeLogWindow.qml");
+            if (component.status === Component.Ready){
+                var dataJson={};
+                var subParams = {
+                    "screen": root.getScreenQRect(),
+                    "root":root
+                }
+                decodeLogWindow = component.createObject(root, subParams);
+                decodeLogWindow.show();
+            }
+        }else
+            decodeLogWindow.show();
     }
 }

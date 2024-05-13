@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.5
+﻿import QtQuick 2.5
 import QtQuick.Layouts 1.2
 import QtQuick.Controls 1.4
 import QtQuick.Controls.Styles 1.4
@@ -24,7 +8,7 @@ Item{
     width: 44
     height: 44
 
-    property int type: 0
+    property int type: 0 //0=普通模式，1=倒计时模式，2=进度模式
     property int loopNumRecode
     property alias maximumValue: set.maximumValue
     property real currentValue: 0
@@ -100,8 +84,10 @@ Item{
         id: imageButton
         anchors.fill: parent
         visible: type===0 || !enable
-        imageSource: sessionType_===Config.SessionType.Demo?"resource/icon/StartFile.png":sConfig.isRun?"resource/icon/Stop.png":
-                                                                                                         sSettings.isInstantly?"resource/icon/FastStart.png":sSettings.isOne?"resource/icon/Start.png":"resource/icon/LoopStart.png"
+        imageSource: "resource/icon/"+(sessionType_===Config.SessionType.Demo?
+                         "StartFile.png":sConfig.isRun?
+                             "Stop.png":sSettings.isInstantly?
+                                 "FastStart.png":sSettings.isOne?"Start.png":"LoopStart.png")
         imageEnterSource: imageSource
         imageDisableSource: "resource/icon/StartDisable.png"
         enabled: (sessionType_===Config.SessionType.Demo || (sessionType_!==Config.SessionType.Demo && isConnect===1))&&enable
@@ -188,6 +174,9 @@ Item{
 
                 if(set.containsMouse_)
                     ctx.fillRect(width/2-5, height/2-5, 10, 10);
+
+                // First, thinner arc
+                // From angle to 2*PI
                 ctx.beginPath();
                 if(type===2)
                     ctx.strokeStyle = set.secondaryColor;
@@ -199,6 +188,9 @@ Item{
                         set.angleOffset + set.angle,
                         set.angleOffset + 2*Math.PI);
                 ctx.stroke();
+
+                // Second, thicker arc
+                // From 0 to angle
                 ctx.beginPath();
                 if(type===2)
                     ctx.strokeStyle = set.primaryColor;

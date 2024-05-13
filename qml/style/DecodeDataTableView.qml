@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -190,12 +174,10 @@ Item{
         columnWidthProvider: function(column){return columnsWidth[column];}
         rowHeightProvider: function(row){return rowsHeight;}
         onHeightChanged: refreshScrollBar()
-        onContentYChanged: {
-            refreshScrollBar()
-        }
+        onContentYChanged: refreshScrollBar()
 
         delegate: Rectangle {
-            property bool isContainsMouse: rowMouseArea.containsMouse||followButton.containsMouse
+            property bool isContainsMouse: rowMouseArea.containsMouse||moreButton.containsMouse
             id: parentRectangle
             width: columnsWidth[column];
             height: rowsHeight
@@ -212,7 +194,7 @@ Item{
                 id: rowMouseArea
                 anchors.fill: parent
                 hoverEnabled: true
-                onDoubleClicked: followButton.onPressed();
+                onDoubleClicked: controller.showViewScope(start,end,!Setting.jumpZoom);
                 onPressed: dataListView.selectIndex=row;
             }
             Text{
@@ -227,10 +209,10 @@ Item{
                 }
             }
             ImageButton{
-                id: followButton
+                id: moreButton
                 visible: column===dataListView.maxIndex && dataListView.focusIndex===row
-                imageSource: "resource/icon/DecodeFollow.png"
-                imageEnterSource: "resource/icon/DecodeFollow.png"
+                imageSource: "resource/icon/DecodeMore.png"
+                imageEnterSource: "resource/icon/DecodeMore.png"
                 width: 16
                 height: 16
                 anchors{
@@ -238,9 +220,19 @@ Item{
                     right: parent.right
                     rightMargin: vbar.visible?13:5
                 }
-                onPressed: controller.showViewScope(start,end,!Setting.jumpZoom);
+                onPressed: {
+                    var data=decodeTableModel.get(row);
+                    var str=data[0];
+                    for(let i=1;i<data["size"];i++)
+                        str+=", "+data[i]
+                    menuPopup.start=start
+                    menuPopup.end=end
+                    menuPopup.dataText=data[3]
+                    menuPopup.allDataText=str
+                    menuPopup.parent=moreButton
+                    menuPopup.visible=true
+                }
             }
-
             Rectangle{
                 visible: column!==dataListView.maxIndex
                 width: 1
@@ -265,6 +257,40 @@ Item{
         onFlickEnded: {
             var t=decodeTableModel.refreshBuffer(dataListView.contentY);
             dataListView.contentY+=t;
+            //decodeTableModel.refreshBuffer(dataListView.contentY);
+        }
+    }
+
+//    Connections{
+//        target: sSignal
+//        function onCloseAllPopup(){
+//            menuPopup.close();
+//        }
+//    }
+    QMenuPopup{
+        property var start
+        property var end
+        property string dataText
+        property string allDataText
+        id: menuPopup
+        showShortcutKey: false
+        isShowTop: true
+        data: [{"showText":qsTr("跳转"),"shortcutKey":"","seleteType":0,"buttonIndex":1},
+            {"showText":"-","shortcutKey":"","seleteType":0,"buttonIndex":-1},
+            {"showText":qsTr("复制\"数据\""),"shortcutKey":"","seleteType":0,"buttonIndex":2},
+            {"showText":qsTr("复制整行数据"),"shortcutKey":"","seleteType":0,"buttonIndex":3}]
+        onSelect: {
+            switch(index){
+            case 1:
+                controller.showViewScope(start,end,!Setting.jumpZoom);
+                break;
+            case 2:
+                clipboard.setText(dataText);
+                break;
+            case 3:
+                clipboard.setText(allDataText);
+                break;
+            }
         }
     }
 
@@ -279,7 +305,7 @@ Item{
         onPositionChanged: {
             if(pressed)
             {
-                var t=decodeTableModel.scrollPosition(position);
+                var t=decodeTableModel.scrollPosition(position, dataListView.height);
                 dataListView.contentY=t;
             }
         }
@@ -294,6 +320,19 @@ Item{
         }
     }
 
+    Connections{
+        target: sSignal
+        function onChannelRefresh(channelID)
+        {
+            if(!sConfig.isBind || channelID!==-1)
+                return;
+            var t=decodeTableModel.scrollPosition(decodeTableModel.showData(), dataListView.height);
+            if(t>0)
+                t+=24;
+            dataListView.contentY=t;
+        }
+    }
+
     function refreshScrollBar(){
         var count=decodeTableModel.getShowCount();
         vbar.position=(decodeTableModel.getShowFirst()+dataListView.contentY/rowsHeight)/count;
@@ -302,7 +341,7 @@ Item{
 
     function resetScrollBarPosition(){
         vbar.position=0;
-        var t=decodeTableModel.scrollPosition(0);
+        var t=decodeTableModel.scrollPosition(0, dataListView.height);
         dataListView.contentY=t;
     }
 }

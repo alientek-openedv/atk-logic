@@ -1,21 +1,6 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef SESSIONCONTROLLER_H
+﻿#ifndef SESSIONCONTROLLER_H
 #define SESSIONCONTROLLER_H
+
 
 #include <QObject>
 #include <QString>
@@ -42,11 +27,11 @@ private:
     Session* m_session=nullptr;
 
 signals:
-    void sessionDrawUpdate(bool isPoll=false);
+    void sessionDrawUpdate(qint32 isPoll=-1);
     void zoomUnitShow(QString text);
     void sendDeviceRecvSchedule(qint32 schedule, qint32 type, qint32 state_);
-    void sendDecodeAnalysis(Segment* segment, qint32 channelCount, qint64 start, qint64 end, qint64 maxSample);
-    void sendRestartDevice(Segment* segment, qint64 maxUnit);
+    void sendDecodeAnalysis(Segment* segment, qint64 start, qint64 end, qint64 maxSample, bool isContinuous);
+    void sendRestartDevice(Segment* segment, qint64 maxUnit, bool isContinuous);
     void measureDataChanged();
     void sendDecodeSchedule(QString decodeID, double schedule);
     void sendVernierTriggerPosition(quint64 position);
@@ -59,19 +44,26 @@ signals:
     void calcMeasureDataComplete(qint32 measureID);
     void sendGlitchString(QString str);
     void sendDecodeReset(QString decodeID);
+    void sendZipDirSchedule(qint32 schedule);
+    void sendUnZipDirSchedule(qint32 schedule);
 
 public slots:
+    //state 0=自动,1=强制显示最大,2=放大,3=缩小,4=显示0点
     void onRefreshZoom(qint32 state);
     void onSessionSelect();
-    void onAppendDecode(QString json, bool end);
+    Q_INVOKABLE void onAppendDecode(QString json, bool end);
+    void onDecodeToPosition(qint64 position, qint64 maxSample_);
 
+    //以下QML变量
 public:
+    Q_INVOKABLE void initFile();
     Q_INVOKABLE void resetBindingPort();
     Q_INVOKABLE void errorInit();
     Q_INVOKABLE void wheelRoll(bool isUp,qint32 x);
     Q_INVOKABLE void showViewScope(qint64 start,qint64 end,bool isZoom);
     Q_INVOKABLE void setWidth(qint32 width);
     Q_INVOKABLE bool start(QJsonObject json,qint32 type);
+    Q_INVOKABLE bool getProgressBarShow();
     Q_INVOKABLE void stop();
     Q_INVOKABLE bool pwmStart(qint8 index, qint32 hz, qint32 duty);
     Q_INVOKABLE bool pwmStop(qint8 index);
@@ -84,10 +76,12 @@ public:
     Q_INVOKABLE void stopDecode(QString decodeID);
     Q_INVOKABLE bool resetDecode(QString decodeID, QJsonObject json);
     Q_INVOKABLE void removeDecode(QString decodeID);
+    Q_INVOKABLE void cleanAllDecode();
     Q_INVOKABLE void setDecodeShowJson(QString decodeID, QJsonObject json);
     Q_INVOKABLE QVariantMap getShowConfig();
     Q_INVOKABLE void setScrollBarPosition(double position);
     Q_INVOKABLE void saveData(QString path, QString sessionName);
+    Q_INVOKABLE void saveBinData(QString path, qint32 type, QString channels);
     Q_INVOKABLE bool needSaveData();
     Q_INVOKABLE bool hasData();
     Q_INVOKABLE void channelNameChanged(qint8 channelID, QString name);
@@ -109,7 +103,13 @@ public:
     Q_INVOKABLE void startDecodeTmp();
     Q_INVOKABLE void setMeasureSelect(qint32 measureID);
     Q_INVOKABLE void saveDecodeTable(QString filePath);
-    Q_INVOKABLE void setShowStart(qint64 showStart);
+    Q_INVOKABLE void setShowStart(qint64 showStart, qint32 refreshState=-1);
+    Q_INVOKABLE void switchVernier(bool isUp,bool isZoom);
+    Q_INVOKABLE qint64 getShowStart();
+    Q_INVOKABLE qint64 getShowStart(qint64 showStart);
+    Q_INVOKABLE qint64 getShowStartMultiply();
+    Q_INVOKABLE qint64 getXWheelPosition(bool isUp, qint32 count=1);
+    Q_INVOKABLE void reloadDecoder();
 
     const QString &sessionName() const;
     void setSessionName(const QString &newSessionName);
@@ -140,6 +140,7 @@ private:
     QString m_sessionName="";
     QString m_sessionID="";
     bool m_isBinding=false;
+    bool m_progressBarShow=false;
     qint32 m_sessionPort=-10;
     qint32 m_sessionType=-1;
     qint32 m_isInit=0;

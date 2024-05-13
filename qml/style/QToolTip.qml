@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.11
+﻿import QtQuick 2.11
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -22,7 +6,7 @@ Popup {
     property string showText
     property string hotkey
     property bool isShow: false
-    property int direction: 1
+    property int direction: 1//箭头方向 0=下，1=左，2=上，3=右
     property bool autoSetIsShow: false
     property int showTextPixelSize: 14
     property alias verticalCenterOffset: show.anchors.verticalCenterOffset
@@ -47,7 +31,7 @@ Popup {
 
     background: Item {
         id: root
-        implicitHeight: 28+((direction===0||direction===2)?canvasTop.height:0)
+        implicitHeight: 10+show.implicitHeight+((direction===0||direction===2)?canvasTop.height:0)
         implicitWidth: show.contentWidth+(hotkeyText.contentWidth==0?0:hotkeyText.contentWidth)+20+((direction===1||direction===3)?canvasLeft.width:0)
         Rectangle{
             id: mainRectangle

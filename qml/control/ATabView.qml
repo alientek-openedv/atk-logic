@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import QtQuick.Layouts 1.3
 import "../config"
@@ -138,10 +122,12 @@ Item {
                     tabButtonModle.get(i).select=true;
                     stackLayout.currentIndex=sessionIndexList[i];
                     Config.tabSelectButton=sessionID;
-                }else
+                    sessionList[stackLayout.currentIndex].sessionSignal.sessionSelect(true);
+                }else{
                     tabButtonModle.get(i).select=false;
+                    sessionList[sessionIndexList[i]].sessionSignal.sessionSelect(false);
+                }
             }
-            sessionList[stackLayout.currentIndex].sessionSignal.sessionSelect();
             Signal.setCursor(Qt.ArrowCursor)
             refreshSplit();
         }
@@ -480,6 +466,7 @@ Item {
             {
                 let del=sessionIndexList[i];
                 sessionList[del].destroy();
+                //                stackLayout.children = Array.from(stackLayout.children).filter(r => r !== sessionList[del])
                 sessionList.splice(del, 1);
                 sessionIndexList.splice(i, 1);
                 for(var ii in sessionIndexList){
@@ -570,18 +557,18 @@ Item {
                 let temp=sessionList[sessionIndexList[i]];
                 if(temp.sessionType_===Config.SessionType.File){
                     switch(type){
-                    case 2:
+                    case 2://关闭所有
                         isDel=true;
                         break;
-                    case 3:
+                    case 3://关闭已保存
                         if(isSave&&!session.sessionController.needSaveData())
                             isDel=true;
                         break;
-                    case 4:
+                    case 4://关闭右侧所有
                         if(i>index_)
                             isDel=true;
                         break;
-                    case 5:
+                    case 5://除此之外关闭所有
                         if(recodeSession!==temp)
                             isDel=true;
                         break;

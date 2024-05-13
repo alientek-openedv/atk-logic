@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import atk.qml.Controls 1.0
 import "../../config"
@@ -38,6 +22,7 @@ Component{
                 var count=list_view_nest.contentY,i=0;
                 for(i=0;i<dataModelNest.count;i++)
                 {
+                    //纠正移位的通道
                     if(list_view_nest.itemAtIndex(i).y!==count){
                         list_view_nest.itemAtIndex(i).y=count;
                     }
@@ -66,7 +51,7 @@ Component{
             if(channelID>=0)
             {
                 if(decodeChannelName==="")
-                    channelHeight_=sSettings.channelHeightMultiple*minChannelHeight;
+                    channelHeight_=sSettings.channelsHeight[channelID];
                 refReshHeight();
                 refReshChannel(channelID);
             }
@@ -104,17 +89,12 @@ Component{
                 }
             }
 
-            function onSetMouseMeasure(isCheck){
-                if(channelID>=0)
-                    drawChannel.isMouseMeasure=isCheck;
-            }
-
             function onChannelColorChanged(){
                 if(channelID>=0)
                 {
                     channelSideBar.channelDataColor=sSettings.channelsDataColor[channelID<0?0:channelID];
                     drawChannel.showDataColor=sSettings.channelsDataColor[channelID<0?0:channelID];
-                    drawChannel.forceRefresh();
+                    drawChannel.update();
                 }
             }
 
@@ -138,6 +118,15 @@ Component{
                 if(channelID===channelID_ && channelHeight_!==cHeight && !moveMouseArea.pressed)
                     channelHeight_=cHeight;
             }
+
+            function onVernierCancelMove(){
+                drawChannel.vernierCancelMove();
+            }
+
+            function onCrossChannelMeasureState(isStop){
+                sConfig.isCrossChannelMeasure=!isStop;
+                drawChannel.crossChannelMeasureStateModel(isStop);
+            }
         }
 
         Connections{
@@ -155,7 +144,8 @@ Component{
             {
                 if(channelID>=0)
                 {
-                    channelHeight_=sSettings.channelHeightMultiple*minChannelHeight;
+                    channelHeight_=sSettings.channelHeightMultiple*33+29;
+                    sSettings.channelsHeight[channelID]=channelHeight_;
                     refReshHeight();
                 }
             }
@@ -185,6 +175,7 @@ Component{
                         channelHeight_=minChannelHeight;
                     else if(channelHeight_+office>800)
                         channelHeight_=800;
+                    sSettings.channelsHeight[channelID]=channelHeight_;
                     sSignal.channelHeightChanged(channelID, channelHeight_);
                     refReshHeight();
                     Signal.setCursor(Qt.SplitVCursor)
@@ -237,13 +228,13 @@ Component{
             isRunCollect: sConfig.isRun
             decodeChannelDesc: decodeChannelName
             isExit: sConfig.isExit
+            isMouseMeasure: Setting.isMouseMeasure
             Component.onCompleted: {
                 if(channelID>=0)
                 {
                     drawChannel.init(sessionID_, channelID);
                     setTheme(Config.tp);
                 }
-                isMouseMeasure=sSettings.isMouseMeasure;
             }
             onHoverEnter: {
                 if(sConfig.isMeasureStart)
@@ -326,6 +317,20 @@ Component{
             onSetLiveFollowing: {
                 if(sConfig.isRun && !sConfig.isBuffer && sConfig.isLiveFollowingPopupShow)
                     sSignal.setLiveFollowing(isEnable,true);
+            }
+
+            onStopXWheel: sSignal.stopXWheel();
+
+            onVernierAppend: {
+                vernierListModel.append();
+                sSignal.channelRefresh(-1);
+            }
+
+            onCrossChannelMeasureState: sSignal.crossChannelMeasureState(isStop);
+
+            onSendCrossChannelMeasurePosition: {
+                sSignal.sendCrossChannelMeasurePosition(type, x, y, mouseY, position, isHit);
+                sSignal.getChannelY(channelID, 3+type, 0);
             }
         }
 

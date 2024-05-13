@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-#ifndef DECODE_CONTROLLER_H
+﻿#ifndef DECODE_CONTROLLER_H
 #define DECODE_CONTROLLER_H
 
 #include <QJsonObject>
@@ -32,7 +16,7 @@
 struct DecodeRowData
 {
     qint8 decodeIndex;
-    qint8 type;
+    quint8 type;
     qint64 start;
     qint64 end;
     QString longText;
@@ -51,8 +35,11 @@ struct DecodeRow
     QString desc;
     bool isShow;
     qint32 dataCount;
-    QVector<DecodeRowData> data;
-    QVector<DecodeRowDataNode> node;
+    qint8 colorState;
+    QColor color;
+    QList<DecodeRowData> data;
+    QList<DecodeRowData> tmpData;
+    QList<DecodeRowDataNode> node;
     QMap<QString,QJsonObject> rowType;
     DecodeRow(){
         DecodeRowDataNode temp;
@@ -60,6 +47,7 @@ struct DecodeRow
         temp.start=0;
         node.append(temp);
         dataCount=0;
+        colorState=0;
     }
 };
 
@@ -82,15 +70,23 @@ struct DecodeRowRoot
     QMutex mutex;
 };
 
+static void Insert_sort(QList<DecodeRowData> &arr);
+
 static void _output_callback(struct atk_proto_data *pData, void *cb_data);
+
+static void _output_binary_callback(struct atk_proto_data *pData, void *cb_data);
+
+class DecodeController;
+
+static void data_insert(DecodeController* decode, QString name, qint32 row);
 
 struct restartRecode
 {
     bool isRecode=false;
     QJsonObject json;
-    qint32 channelCount;
     qint64 ullDecodeStart;
     qint64 ullDecodeEnd;
+    qint64 ullMaxSample;
 };
 
 class DecodeController : public QObject
@@ -100,17 +96,19 @@ public:
     explicit DecodeController(const QString decodeID, QObject *parent = nullptr);
     ~DecodeController();
     bool analysisJSON(QJsonObject json, qint64 samplingFrequency);
-    void decodeAnalysis(Segment* segment, qint32 channelCount, qint64 ullDecodeStart, qint64 ullDecodeEnd, qint64 maxSample);
+    void decodeAnalysis(Segment* segment, qint64 ullDecodeStart, qint64 ullDecodeEnd, qint64 maxSample, bool isContinuous);
+    bool decodeToPosition(qint32 multiply, qint64 ullPosition, qint64 maxSample_);
     void stopDedoceAnalysis();
     void waitStopDedoceAnalysis();
     void setRecodeJSON(QJsonObject json);
-    bool restart(Segment* segment, qint64 maxUnit);
+    bool restart(Segment* segment, qint64 maxUnit, bool isContinuous);
     void deleteData();
     qint32 findDecodeRowFirstData(DecodeRowRoot* rows, qint32 index, qint32 left, qint32 right, qint64 start);
     void findDecodeRowDataNode(DecodeRowRoot* rows, qint32 index, qint32 &left_, qint32 &right_, qint64 start);
     bool isRun();
     QString getDecodeID();
     QJsonObject getJsonObject();
+    void reloadDecoder();
 
 private:
     void setState(qint8 state);
@@ -120,29 +118,34 @@ signals:
     void sendDecodeReset(QString decodeID);
 
 public:
-    QHash<QString, DecodeRowRoot*> m_rowList;
+    QHash<QString, DecodeRowRoot*> m_rowList;//协议返回通道数据
     QMutex m_rowListMutex;
-    QVector<DataOrder> m_orderList;
+    QList<DataOrder> m_orderList;//协议排序索引
     QMutex m_orderListMutex;
-    QVector<QString> m_decodeIndex;
+    QList<QString> m_decodeIndex;//协议Name顺序
 
     qint32 m_multiply;
     qint64 m_decodeStart;
+    qint32 m_height=1;//高度倍数
+    bool m_isLockRow=false;
     bool m_isDelete=false;
     bool m_isStop=false;
     bool m_isReportedError=false;
+    bool m_isRestart=false;
 
 private:
-    const qint32 _MAX_CHUNK_SIZE = 1024 * 64;
+    const qint32 _MAX_CHUNK_SIZE = 1024 * 64;	/* 发送数据包最大长度 */
     QMutex m_lock;
-    qint8 m_state=0;
+    qint8 m_state=0;//0=无运行线程，1=运行中，2=退出中
     QThread m_thread;
     QString m_decodeID;
     atk_session* m_decodeSession=nullptr;
     atk_decoder_inst *m_decoder_inst=nullptr;
+    QMutex m_streamLock;
+    restartRecode m_streamRecode;
     restartRecode m_recode;
-    QVector<int> m_channelList;
-    QVector<int> m_sendChannelList;
-    bool m_isFirst=true;
+    QVector<int> m_channelList;//获取数据的对应通道
+    QVector<int> m_sendChannelList;//发送数据的对应通道
+    bool m_isFirst=true;//是否首次加载
 };
-#endif 
+#endif // DECODE_CONTROLLER_H

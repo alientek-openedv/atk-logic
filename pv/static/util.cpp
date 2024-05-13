@@ -1,20 +1,6 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
+﻿#include "util.h"
 
-#include "util.h"
+bool g_isLinuxMemoryLimit=true;
 
 QString getRandString(qint32 len)
 {
@@ -56,13 +42,23 @@ QString nsToShowStr(double time, int decimal)
     QString refStr="";
     QString unitList[]={"ns","μs","ms","s"};
     QRegExp reg;
-    reg.setPattern("(\\.){0,1}0+$");
+    reg.setPattern("(\\.)0+$");
     for(qint32 i=0;i<4;i++){
         if(time>=1000 && i<3)
             time/=1000;
         else
         {
-            refStr=QString::number(time, 'f', decimal).replace(reg,"")+" "+unitList[i];
+            if(decimal<=6)
+                refStr=QString::number(QString::number(time, 'f', decimal).replace(reg,"").toDouble())+" "+unitList[i];
+            else{
+                qint32 count=1;
+                double tmp=time;
+                while(tmp>=10){
+                    tmp/=10;
+                    count++;
+                }
+                refStr=QString::number(QString::number(time, 'g', count+decimal).replace(reg,"").toDouble())+" "+unitList[i];
+            }
             break;
         }
     }
@@ -74,13 +70,23 @@ QString hzToShowStr(double hz, int decimal)
     QString refStr="";
     QString unitList[]={"Hz","KHz","MHz","GHz"};
     QRegExp reg;
-    reg.setPattern("(\\.){0,1}0+$");
+    reg.setPattern("(\\.)0+$");
     for(qint32 i=0;i<4;i++){
         if(hz>=1000 && i<3)
             hz/=1000;
         else
         {
-            refStr=QString::number(hz, 'f', decimal).replace(reg,"")+" "+unitList[i];
+            if(decimal<=6)
+                refStr=QString::number(QString::number(hz, 'f', decimal).replace(reg,"").toDouble())+" "+unitList[i];
+            else{
+                qint32 count=1;
+                double tmp=hz;
+                while(tmp>=10 && !qIsInf(tmp)){
+                    tmp/=10;
+                    count++;
+                }
+                refStr=QString::number(QString::number(hz, 'g', count+decimal).replace(reg,"").toDouble())+" "+unitList[i];
+            }
             break;
         }
     }
@@ -92,13 +98,23 @@ QString bitToShowStr(double bit, int decimal)
     QString refStr="";
     QString unitList[]={"B","K","M","G"};
     QRegExp reg;
-    reg.setPattern("(\\.){0,1}0+$");
+    reg.setPattern("(\\.)0+$");
     for(qint32 i=0;i<4;i++){
         if(bit>=1000 && i<3)
             bit/=1000;
         else
         {
-            refStr=QString::number(bit, 'f', decimal).replace(reg,"")+" "+unitList[i];
+            if(decimal<=6)
+                refStr=QString::number(QString::number(bit, 'f', decimal).replace(reg,"").toDouble())+" "+unitList[i];
+            else{
+                qint32 count=1;
+                double tmp=bit;
+                while(tmp>=10){
+                    tmp/=10;
+                    count++;
+                }
+                refStr=QString::number(QString::number(bit, 'g', count+decimal).replace(reg,"").toDouble())+" "+unitList[i];
+            }
             break;
         }
     }
@@ -182,19 +198,19 @@ QByteArray triggerStringToByte(QJsonArray channelArray,QString text){
     {
         if(channelArray[index].toObject()["enable"].toBool())
             b+=(uchar)(ii%2==0?128:8);
-        if(i=='R')
+        if(i=='R')//上升沿
             b += (uchar)(ii % 2 == 0 ? 16 : 1);
-        else if(i=='1')
+        else if(i=='1')//高电平
             b += (uchar)(ii % 2 == 0 ? 64 : 4);
-        else if(i=='F')
+        else if(i=='F')//下降沿
             b += (uchar)(ii % 2 == 0 ? 32 : 2);
-        else if(i=='0')
+        else if(i=='0')//低电平
         {}
-        else if(i=='C')
+        else if(i=='C')//双沿
         {
             b += (uchar)(ii % 2 == 0 ? 16 : 1);
             b += (uchar)(ii % 2 == 0 ? 32 : 2);
-        }else{
+        }else{//默认随机触发
             b += (uchar)(ii % 2 == 0 ? 16 : 1);
             b += (uchar)(ii % 2 == 0 ? 32 : 2);
             b += (uchar)(ii % 2 == 0 ? 64 : 4);
@@ -232,77 +248,6 @@ QString reverseString(QString str){
     return sb;
 }
 
-bool zipDir(QString& dirPath,QString savePath)
-{
-    bool  ret;
-
-    QZipWriter *writer = new QZipWriter(savePath);
-    if(QZipWriterEx(writer,dirPath,dirPath))
-        ret=true;
-    else
-        ret=false;
-    writer->close();
-    delete writer;
-    return  ret;
-}
-
-bool  QZipWriterEx(QZipWriter *writer, QString tmpPath, QString basePath)
-{
-    QDir dir(tmpPath);
-    bool ret=true;
-    foreach (QFileInfo info, dir.entryInfoList())
-    {
-        if (info.fileName() == "." || info.fileName() == ".." || !ret)
-            continue;
-        if (info.isFile())
-        {
-            QFile upfile(info.filePath());
-            upfile.open(QIODevice::ReadOnly);
-            QString fileName = info.filePath().mid(basePath.size()+1,info.filePath().size());
-            writer->addFile(fileName,upfile.readAll());
-            upfile.close();
-        }
-        else if (info.isDir())
-        {
-            ret = QZipWriterEx(writer,info.filePath(),basePath);
-        }
-    }
-    return ret;
-}
-
-bool unZipDir(QString &filePath, QString savePath)
-{
-    QDir dir(savePath);
-    if (!dir.exists())
-        dir.mkpath(savePath);
-    bool unzipok = true;
-    try {
-        QZipReader zipreader(filePath);
-        if(zipreader.fileInfoList().size()<=0)
-            return false;
-        for (int i = 0; i < zipreader.fileInfoList().size(); ++i) {
-            QStringList paths = zipreader.fileInfoList().at(i).filePath.split("/");
-            paths.removeLast();
-            QString path = paths.join("/");
-            QDir subdir(savePath + "/" + path);
-            if (!subdir.exists())
-                dir.mkpath(QString::fromLocal8Bit("%1").arg(savePath + "/" + path));
-
-            QFile file(savePath + "/" + zipreader.fileInfoList().at(i).filePath);
-            file.open(QIODevice::WriteOnly);
-            QByteArray dt = zipreader.fileInfoList().at(i).filePath.toUtf8();
-            QString strtemp = QString::fromLocal8Bit(dt);
-            QByteArray array = zipreader.fileData(strtemp);
-            file.write(array);
-            file.close();
-        }
-        zipreader.close();
-    } catch (...) {
-        unzipok=false;
-    }
-    return unzipok;
-}
-
 QString JsonToString(const QJsonObject& json)
 {
     return QString(QJsonDocument(json).toJson(QJsonDocument::Compact));
@@ -328,9 +273,10 @@ QJsonArray StringToJsonArray(const QString& str)
     QJsonDocument document;
     QJsonParseError err;
     document = QJsonDocument::fromJson(str.toUtf8(), &err);
-
-    if (err.error != QJsonParseError::NoError)
+    if (err.error != QJsonParseError::NoError){
+        qDebug()<<"StringToJsonArrayError:"<<str;
         return QJsonArray();
+    }
     return QJsonArray(document.array());
 }
 
@@ -345,7 +291,7 @@ void pathRepair(QString &path)
 #if defined (Q_OS_LINUX) || defined (Q_OS_MACX)
     deleteLen--;
 #endif
-    if(path.left(8)=="file:
+    if(path.left(8)=="file:///")
         path=path.right(path.length()-deleteLen);
     path=path.replace("\\\\","/");
     path=path.replace("\\","/");
@@ -354,13 +300,13 @@ void pathRepair(QString &path)
 void deleteEmptyDir(QString path)
 {
     QDir tmp(path);
-    tmp.setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden); 
+    tmp.setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden); //设置过滤器
     foreach(QFileInfo objFileInfo, tmp.entryInfoList())
     {
         if(objFileInfo.isDir())
         {
             QString qstrSubFilePath = objFileInfo.absoluteFilePath();
-            deleteEmptyDir(qstrSubFilePath);
+            deleteEmptyDir(qstrSubFilePath);//递归删除目录下的所有空目录
             QDir qdrSubPath(qstrSubFilePath);
             qdrSubPath.setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden);
             QFileInfoList qlstFileInfo =  qdrSubPath.entryInfoList();
@@ -368,4 +314,46 @@ void deleteEmptyDir(QString path)
                 qdrSubPath.rmdir(qstrSubFilePath);
         }
     }
+}
+
+void GetDirFilesCount(const QString& path, qint32& count){
+    QDir dir(path);
+    foreach (QFileInfo info, dir.entryInfoList())
+    {
+        if (info.fileName() == "." || info.fileName() == "..")
+            continue;
+        if (info.isFile())
+            count++;
+        else if (info.isDir())
+            GetDirFilesCount(info.filePath(),count);
+    }
+}
+
+void* malloc_(size_t len)
+{
+#ifdef Q_OS_LINUX
+    if(g_isLinuxMemoryLimit){
+        struct sysinfo s_info;
+        if(sysinfo(&s_info)==0)
+        {
+            if((qreal)s_info.freeram/s_info.totalram*100<1)
+                return nullptr;
+        }
+    }
+#endif
+    return malloc(len);
+}
+
+void showHex(quint8* data,int len){
+    QString t="";
+    for(qint32 i=0;i<len;i++){
+        QString byteStr;
+        byteStr = QString::number(*(data+i),16);
+        if(byteStr.length() == 1)
+            byteStr="0x0"+byteStr;
+        else
+            byteStr="0x"+ byteStr;
+        t+=byteStr+",";
+    }
+    LogHelp::write(QString("USB发送数据%1").arg(t));
 }

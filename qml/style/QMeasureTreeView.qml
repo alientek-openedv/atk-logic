@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.11
+﻿import QtQuick 2.11
 import QtQuick.Controls 2.5
 import "../config"
 
@@ -59,7 +43,7 @@ ListView {
             property bool isExtend: false
             property var dataList: [startText,endText,time,rising,falling,minFreq,maxFreq]
             property var dataNameList: ["start","end","time","rising","falling","minFreq","maxFreq"]
-            property bool isContainsMouse: rowMouseArea.containsMouse||extendButton.containsMouse||followButton.containsMouse||moreButton.containsMouse
+            property bool isContainsMouse: rowMouseArea.containsMouse||extendButton.containsMouse||deleteButton.containsMouse||moreButton.containsMouse
             width: listView.contentWidth
             height: isExtend?rowsHeight+20*(mainR.dataNameList.length):rowsHeight
             color: currentIndex===index?Config.mouseEnterColor:"transparent"
@@ -90,10 +74,12 @@ ListView {
                         width: parent.width
                         height: rowsHeight
                         ImageButton{
-                            id: followButton
+                            id: deleteButton
                             visible: moreButton.visible
-                            imageSource: "resource/icon/DecodeFollow.png"
-                            imageEnterSource: "resource/icon/DecodeFollow.png"
+                            imageSource: "resource/icon/"+Config.tp+"/Delete.png"
+                            imageEnterSource: "resource/icon/DeleteEnter.png"
+                            imageWidth: 9
+                            imageHeight: 11
                             width: 16
                             height: 16
                             z: 5
@@ -102,26 +88,29 @@ ListView {
                                 right: moreButton.left
                                 rightMargin: 2
                             }
-                            onPressed: measureFollow(start,end,measureID,channelID);
+                            onPressed: sSignal.measureRemove(measureID);
                         }
                         ImageButton{
                             id: moreButton
                             visible: mainR.isContainsMouse&&listView.selectIndex===index
+                            imageWidth: 2
+                            imageHeight: 12
                             imageSource: "resource/icon/"+Config.tp+"/More.png"
                             imageEnterSource: "resource/icon/"+Config.tp+"/MoreEnter.png"
-                            width: 10
+                            width: 12
                             height: 16
                             z: 5
                             anchors{
                                 verticalCenter: parent.verticalCenter
+                                verticalCenterOffset: -1
                                 right: parent.right
                                 rightMargin: vbar.visible?13:6
                             }
                             onPressed: menuPopup.visible=true
                         }
                         Connections{
-                            target: sConfig
-                            function onIsRunChanged(){
+                            target: sSignal
+                            function onCloseAllPopup(){
                                 menuPopup.close();
                             }
                         }
@@ -154,6 +143,8 @@ ListView {
                                 ImageButton{
                                     id: extendButton
                                     anchors.centerIn: parent
+                                    imageWidth: 4
+                                    imageHeight: 6
                                     imageSource: "resource/icon/"+Config.tp+"/Extend.png"
                                     imageEnterSource: imageSource
                                     rotation: mainR.isExtend?90:0
@@ -192,17 +183,28 @@ ListView {
                                     elide: Qt.ElideRight
                                     font.pixelSize: 12
                                     color: Config.textColor
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
                                 Image {
                                     id: vernierTextImage
+                                    width: 10
+                                    height: 9
+                                    fillMode: Image.PreserveAspectFit
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: "../../resource/icon/"+Config.tp+"/VernierTextImage.png"
                                 }
                             }
                             Row{
+                                height: parent.height
                                 spacing: 2
                                 Image {
-                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 9
+                                    height: 9
+                                    fillMode: Image.PreserveAspectFit
+                                    anchors{
+                                        verticalCenter: parent.verticalCenter
+                                        verticalCenterOffset: 1
+                                    }
                                     source: "../../resource/icon/"+Config.tp+"/delte.png"
                                 }
                                 Text {
@@ -210,6 +212,7 @@ ListView {
                                     elide: Qt.ElideRight
                                     font.pixelSize: 12
                                     color: Config.textColor
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
                         }

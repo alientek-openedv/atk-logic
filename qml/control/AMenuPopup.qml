@@ -1,26 +1,10 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.15
+﻿import QtQuick 2.15
 import QtQuick.Controls 2.5
 import "../config"
 import "../style"
 
 Rectangle {
-    property int showModel: 0 
+    property int showModel: 0 //0=正常，1=Demo/File
     property string filePath: ""
     id: menuRoot
     color: "transparent"
@@ -33,6 +17,8 @@ Rectangle {
             setButton.imageEnterSource="resource/icon/Set.png";
             decodeButton.imageSource="resource/icon/Decode.png";
             decodeButton.imageEnterSource="resource/icon/Decode.png";
+//            triggerButton.imageSource="resource/icon/Trigger.png";
+//            triggerButton.imageEnterSource="resource/icon/Trigger.png";
             measureButton.imageSource="resource/icon/Measure.png";
             measureButton.imageEnterSource="resource/icon/Measure.png";
             searchButton.imageSource="resource/icon/Search.png";
@@ -46,6 +32,10 @@ Rectangle {
                 decodeButton.imageSource="resource/icon/DecodeActivate.png";
                 decodeButton.imageEnterSource="resource/icon/DecodeActivate.png";
                 break;
+//            case Config.SidebarContentType.Trigger:
+//                triggerButton.imageSource="resource/icon/TriggerActivate.png";
+//                triggerButton.imageEnterSource="resource/icon/TriggerActivate.png";
+//                break;
             case Config.SidebarContentType.Measure:
                 measureButton.imageSource="resource/icon/MeasureActivate.png";
                 measureButton.imageEnterSource="resource/icon/MeasureActivate.png";
@@ -60,6 +50,7 @@ Rectangle {
                 exportButton.enabled=false;
                 saveButton.enabled=false;
                 saveAsButton.enabled=false;
+                exportBINButton.enabled=false;
                 showModel=1;
             }else if(sessionType===Config.SessionType.File)
                 showModel=1;
@@ -71,6 +62,7 @@ Rectangle {
             exportButton.enabled=(!isRun && !isLoop && isData);
             saveButton.enabled=exportButton.enabled;
             saveAsButton.enabled=exportButton.enabled;
+            exportBINButton.enabled=exportButton.enabled;
             normalButton.enabled=(!isRun && !isLoop);
             loopButton.enabled=normalButton.enabled;
             instantButton.enabled=normalButton.enabled;
@@ -147,8 +139,8 @@ Rectangle {
                         if(isHardwareUpdate)
                         {
                             hardwareUpdateButtonTag.visible=isShow
-                            if(updataPopup.isHardwareUpdate!==0)
-                                updataPopup.visible=false;
+                            if(updatePopup.isHardwareUpdate!==0)
+                                updatePopup.visible=false;
                         }
                         else
                             updateButtonTag.visible=isShow
@@ -168,6 +160,8 @@ Rectangle {
                         bottom: parent.bottom
                         margins: 5
                     }
+                    imageWidth: Config.isFixed?10:11
+                    imageHeight: Config.isFixed?7:11
                     imageSource: Config.isFixed?"resource/icon/TopShrink.png":"resource/icon/light/TopEnter.png"
                     imageEnterSource: imageSource
                     backgroundColor: Config.pageColor
@@ -212,6 +206,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("打开")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Open.png"
                                 imageEnterSource: imageSource
                                 backgroundColor: Config.pageColor
@@ -229,6 +225,8 @@ Rectangle {
                                 showText: qsTr("导入工程")
                                 padding: 3
                                 enabled: Config.isHardwarePageConnect&&normalButton.enabled
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/ImportProject.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/ImportProjectDisable.png"
@@ -246,6 +244,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("保存")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Save.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/SaveDisable.png"
@@ -256,7 +256,7 @@ Rectangle {
                                     if(filePath==="")
                                         saveDialog.open();
                                     else
-                                        Signal.saveData(filePath, false, 2);
+                                        Signal.saveData(filePath, false, Config.SaveType.ATKDL, "");
                                 }
                             }
                             ImageButton{
@@ -265,6 +265,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("另存为")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/SaveAs.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/SaveAsDisable.png"
@@ -308,6 +310,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("导出")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Export.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/ExportDisable.png"
@@ -315,8 +319,28 @@ Rectangle {
                                 backgroundMouseEnterColor: Config.mouseEnterColor
                                 backgroundPressedColor: Config.mouseEnterColor
                                 onPressed: {
-                                    exportDialog.saveType=0;
+                                    exportDialog.saveType=Config.SaveType.DataCSV;
                                     exportDialog.open();
+                                }
+                            }
+                            ImageButton{
+                                id: exportBINButton
+                                implicitWidth: 30
+                                height: 46
+                                showText: qsTr("导出原始数据")
+                                padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
+                                imageSource: "resource/icon/ExportBIN.png"
+                                imageEnterSource: imageSource
+                                imageDisableSource: "resource/icon/"+Config.tp+"/ExportBINDisable.png"
+                                backgroundColor: Config.pageColor
+                                backgroundMouseEnterColor: Config.mouseEnterColor
+                                backgroundPressedColor: Config.mouseEnterColor
+                                onPressed: {
+                                    Signal.showExportBinPopup();
+                                    if(!Config.isFixed)
+                                        Signal.menuStateChanged(Config.MenuState.NoDisplay);
                                 }
                             }
                         }
@@ -360,6 +384,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("单次采集")
                                 padding: 3
+                                imageWidth: 20
+                                imageHeight: 20
                                 imageSource: "resource/icon/Start_small.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/Start_small_Disable.png"
@@ -374,6 +400,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("循环采集")
                                 padding: 3
+                                imageWidth: 20
+                                imageHeight: 20
                                 imageSource: "resource/icon/LoopStart_small.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/LoopStart_small_Disable.png"
@@ -388,6 +416,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("立即采集")
                                 padding: 3
+                                imageWidth: 20
+                                imageHeight: 20
                                 imageSource: "resource/icon/FastStart_small.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/FastStart_small_Disable.png"
@@ -402,6 +432,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("停止")
                                 padding: 3
+                                imageWidth: 20
+                                imageHeight: 20
                                 imageSource: "resource/icon/Stop_small.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/Stop_small_Disable.png"
@@ -503,7 +535,6 @@ Rectangle {
                                         imageEnterSource: imageSource
                                         verticalCenterOffset: 1
                                         horizontalCenterOffset: 1
-                                        fillMode: Image.PreserveAspectFit
                                         imageHeight: 15
                                         imageWidth: 15
                                         onPressed: refreshZoom(2)
@@ -523,7 +554,6 @@ Rectangle {
                                         imageSource: "resource/icon/ZoomOut.png"
                                         imageEnterSource: imageSource
                                         verticalCenterOffset: 1
-                                        fillMode: Image.PreserveAspectFit
                                         imageHeight: 15
                                         imageWidth: 15
                                         onPressed: refreshZoom(3)
@@ -543,7 +573,6 @@ Rectangle {
                                         imageSource: "resource/icon/ZoomFull.png"
                                         imageEnterSource: imageSource
                                         verticalCenterOffset: 1
-                                        fillMode: Image.PreserveAspectFit
                                         imageHeight: 15
                                         imageWidth: 15
                                         onPressed: refreshZoom(1)
@@ -560,12 +589,11 @@ Rectangle {
                                     ImageButton{
                                         height: 22
                                         width: 27
+                                        imageHeight: 15
+                                        imageWidth: 15
                                         imageSource: "resource/icon/SetZero.png"
                                         imageEnterSource: imageSource
                                         verticalCenterOffset: 1
-                                        fillMode: Image.PreserveAspectFit
-                                        imageHeight: 15
-                                        imageWidth: 15
                                         onPressed: refreshZoom(4)
                                     }
                                 }
@@ -603,6 +631,7 @@ Rectangle {
                     Item{
                         width: hardwareRow.width
                         height: parent.height
+                        visible: showModel===0
                         Row{
                             id: hardwareRow
                             spacing: 20
@@ -616,6 +645,8 @@ Rectangle {
                                 showText: qsTr("固件更新")
                                 padding: 3
                                 enabled: Config.isHardwareUpdate
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Update.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/"+Config.tp+"/UpdateDisable.png"
@@ -624,21 +655,22 @@ Rectangle {
                                 backgroundPressedColor: Config.mouseEnterColor
                                 onPressed: {
                                     switch(Config.updateJson["state"]){
-                                    case 2:
+                                    case 2://获取错误
                                         windowError.error_msg=qsTr("连接服务器失败，请检查网络，并重连设备");
                                         break;
                                     case 3:
                                         windowError.error_msg=qsTr("请连接设备。");
                                         break;
                                     default:
-                                        updataPopup.json=Config.updateJson["data"];
-                                        updataPopup.sText=qsTr("内部版本")+" MCU:"+root.getVersion(true)+" FPGA:"+root.getVersion(false);
-                                        updataPopup.url=Config.updateJson["url"];
-                                        updataPopup.isUpdate=(Config.updateJson["state"]===1||Config.updateJson["state"]===4);
-                                        updataPopup.isHardwareUpdate=1;
-                                        if(Config.updateJson["state"]===4)
-                                            updataPopup.isHardwareUpdate=2;
-                                        updataPopup.visible=true;
+                                        updatePopup.json=Config.updateJson["data"];
+                                        updatePopup.sText=qsTr("内部版本")+" "+root.getVersionStr();
+                                        updatePopup.url=Config.updateJson["url"];
+                                        updatePopup.isUpdate=(Config.updateJson["state"]===1||Config.updateJson["state"]===4);
+                                        updatePopup.isHardwareUpdate=1;
+                                        updatePopup.showNotRemindButton=false;
+                                        if(Config.updateJson["state"]===4)//设备异常
+                                            updatePopup.isHardwareUpdate=2;
+                                        updatePopup.visible=true;
                                     }
                                 }
                                 Rectangle{
@@ -695,6 +727,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("解码")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Decode.png"
                                 imageEnterSource: imageSource
                                 backgroundColor: Config.pageColor
@@ -702,25 +736,27 @@ Rectangle {
                                 backgroundPressedColor: Config.mouseEnterColor
                                 onPressed: setSidebarContentType(Config.SidebarContentType.Decode)
                             }
-
-
-
-
-
-
-
-
-
-
-
-
-
+//                            ImageButton{
+//                                id: triggerButton
+//                                implicitWidth: 30
+//                                height: 46
+//                                showText: qsTr("触发")
+//                                padding: 3
+//                                imageSource: "resource/icon/Trigger.png"
+//                                imageEnterSource: imageSource
+//                                backgroundColor: Config.pageColor
+//                                backgroundMouseEnterColor: Config.mouseEnterColor
+//                                backgroundPressedColor: Config.mouseEnterColor
+//                                onPressed: setSidebarContentType(Config.SidebarContentType.Trigger)
+//                            }
                             ImageButton{
                                 id: measureButton
                                 implicitWidth: 30
                                 height: 46
                                 showText: qsTr("测量")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Measure.png"
                                 imageEnterSource: imageSource
                                 backgroundColor: Config.pageColor
@@ -734,6 +770,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("搜索")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Measure.png"
                                 imageEnterSource: imageSource
                                 backgroundColor: Config.pageColor
@@ -776,6 +814,8 @@ Rectangle {
                                 showText: "简体中文"
                                 padding: 3
                                 enabled: Config.language!==Config.languageList[0]
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Chinese.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/ChineseActivate.png"
@@ -790,6 +830,8 @@ Rectangle {
                                 showText: "English"
                                 padding: 3
                                 enabled: Config.language!==Config.languageList[1]
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/English.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: "resource/icon/EnglishActivate.png"
@@ -833,6 +875,8 @@ Rectangle {
                                 showText: qsTr("明亮")
                                 padding: 3
                                 enabled: Setting.theme!=1
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/"+Config.tp+"/LightModel.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: imageSource
@@ -850,6 +894,8 @@ Rectangle {
                                 showText: qsTr("暗黑")
                                 padding: 3
                                 enabled: Setting.theme!=0
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/"+Config.tp+"/DarkModel.png"
                                 imageEnterSource: imageSource
                                 imageDisableSource: imageSource
@@ -895,7 +941,7 @@ Rectangle {
                                 ignoreUnknownSignals: true
                                 function onDataSend(dataJson)
                                 {
-                                    
+                                    //                                    console.log(JSON.stringify(dataJson));
                                 }
 
                                 function onClosing(){
@@ -935,6 +981,8 @@ Rectangle {
                                 height: 46
                                 showText: qsTr("软件更新")
                                 padding: 3
+                                imageWidth: 30
+                                imageHeight: 30
                                 imageSource: "resource/icon/Update.png"
                                 imageEnterSource: imageSource
                                 backgroundColor: Config.pageColor
@@ -979,6 +1027,7 @@ Rectangle {
                 right: parent.right
                 top: borderRectangle.bottom
             }
+            height: 8
             source: "../../resource/icon/"+Config.tp+"/DropShadow.png"
         }
     }

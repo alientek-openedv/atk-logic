@@ -1,20 +1,4 @@
-﻿/**
- ****************************************************************************************************
- * @author      正点原子团队(ALIENTEK)
- * @date        2023-07-18
- * @license     Copyright (c) 2023-2035, 广州市星翼电子科技有限公司
- ****************************************************************************************************
- * @attention
- *
- * 在线视频:www.yuanzige.com
- * 技术论坛:www.openedv.com
- * 公司网址:www.alientek.com
- * 购买地址:zhengdianyuanzi.tmall.com
- *
- ****************************************************************************************************
- */
-
-import QtQuick 2.11
+﻿import QtQuick 2.11
 import QtQuick.Window 2.15
 import "../config"
 import "../style"
@@ -23,10 +7,11 @@ Window {
     signal dataSend(var dataJson)
     property var screen
     property var dataJson
+    property var openChannels
     id: window
     visible: true
     modality: Qt.WindowModal
-    flags: Qt.Window | Qt.FramelessWindowHint
+    flags: Qt.FramelessWindowHint
     color: "#00000000"
     width: dropShadow.width
     height: dropShadow.height
@@ -40,6 +25,11 @@ Window {
     }
 
     Component.onCompleted: Config.isSetModel=true;
+
+    //    //@----disable-check M16
+    //    onClosing: function(closeevent){
+    //        dataSend("123456");
+    //    }
 
     Image {
         id: dropShadow
@@ -61,6 +51,7 @@ Window {
             width: parent.width
             height: 38
             Text {
+                id: titleText
                 text: qsTr("毛刺过滤设置")
                 font.pixelSize: 18
                 anchors{
@@ -70,6 +61,51 @@ Window {
                 }
                 color: Config.textColor
             }
+
+            ImageButton{
+                property bool isSelect: false
+                z: 100
+                width: 16
+                height: 16
+                imageSource: "resource/icon/GlitchRemovalSelectAll"+(isSelect?"Enter":"")+".png"
+                imageEnterSource: imageSource
+                imagePressedSource: imageSource
+                anchors{
+                    left: titleText.right
+                    leftMargin: 10
+                    verticalCenter: parent.verticalCenter
+                }
+                onPressed: {
+                    isSelect=!isSelect
+                    let i;
+                    if(isSelect){
+                        for(i in selectColumnLeft.children){
+                            if(selectColumnLeft.children[i].children[0])
+                                selectColumnLeft.children[i].children[0].isCheck=(openChannels.indexOf(selectColumnLeft.children[i].children[0].chIndex)!==-1);
+                        }
+                        for(i in selectColumnRight.children){
+                            if(selectColumnRight.children[i].children[0])
+                                selectColumnRight.children[i].children[0].isCheck=(openChannels.indexOf(selectColumnRight.children[i].children[0].chIndex)!==-1);
+                        }
+                    }else{
+                        for(i in selectColumnLeft.children){
+                            if(selectColumnLeft.children[i].children[0])
+                                selectColumnLeft.children[i].children[0].isCheck=false;
+                        }
+                        for(i in selectColumnRight.children){
+                            if(selectColumnRight.children[i].children[0])
+                                selectColumnRight.children[i].children[0].isCheck=false;
+                        }
+                    }
+                }
+                QToolTip{
+                    parent: parent
+                    isShow: parent.containsMouse
+                    direction: 3
+                    showText: parent.isSelect?qsTr("取消全选"):qsTr("全选已启用通道")
+                }
+            }
+
             ImageButton{
                 z: 100
                 width: 10
@@ -85,7 +121,7 @@ Window {
             }
             MouseArea{
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton 
+                acceptedButtons: Qt.LeftButton //只处理鼠标左键
                 property point clickPos: "0,0"
                 onPressed: clickPos=Qt.point(mouse.x,mouse.y)
                 onPositionChanged: {
@@ -127,14 +163,15 @@ Window {
                 left: parent.left
                 leftMargin: 20
             }
-
             Column{
+                id: selectColumnLeft
                 spacing: 10
                 Repeater{
                     model: 8
                     Row{
                         spacing: 5
                         QCheckBox{
+                            property int chIndex: index
                             id: checkLeftBox
                             width: 52
                             buttonText: "Ch"+index
@@ -169,12 +206,14 @@ Window {
                 }
             }
             Column{
+                id: selectColumnRight
                 spacing: 10
                 Repeater{
                     model: 8
                     Row{
                         spacing: 5
                         QCheckBox{
+                            property int chIndex: index+8
                             id: checkRightBox
                             width: 52
                             buttonText: "Ch"+(index+8)
