@@ -1,0 +1,35 @@
+# Build output
+build/
+build-*/
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+Makefile
+Makefile.*
+.qmake.stash
+.qmake.cache
+*.pro.user
+*.pro.user.*
+
+# Third-party sources (cloned locally; not part of this repo)
+third_party/
+
+# Python bytecode (Sigrok protocol decoders are imported at runtime)
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

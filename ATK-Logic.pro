@@ -10,7 +10,7 @@ TARGET = ATK-Logic
 PRECOMPILED_HEADER = $$PWD/stdafx.h
 
 VERSION = 1.0.6.6
-DEFINES += APP_VERSION_NUM=1066
+DEFINES += APP_VERSION_NUM=1199
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 DEFINES += FPGA_MIN_VERSION_NUM=115
 
@@ -122,6 +122,30 @@ win32 {
         QMAKE_CXXFLAGS += /utf-8
         QMAKE_POST_LINK += xcopy /s /y \"$$SRC_DIR_DLL\" \"$$DST_DIR_DLL\"
     }
+
+unix:!macx {
+    SOURCES += pv/utils/qtlockedfile/qtlockedfile_unix.cpp
+
+    ATK_SRD_DIR = $$PWD/third_party/atk_libsigrokdecode
+    QBREAKPAD_DIR = $$PWD/third_party/qBreakpad
+
+    INCLUDEPATH += $$ATK_SRD_DIR \
+                   $$QBREAKPAD_DIR/handler
+
+    LIBS += $$ATK_SRD_DIR/atk_decoder.o \
+            -L$$ATK_SRD_DIR/_build/.libs -lsigrokdecode \
+            -L$$QBREAKPAD_DIR/handler -lqBreakpad \
+            -lusb-1.0 -lX11
+
+    LIBS += $$system(pkg-config --libs glib-2.0 libusb-1.0 python3-embed)
+    QMAKE_CFLAGS += $$system(pkg-config --cflags glib-2.0 libusb-1.0 python3-embed)
+    QMAKE_CXXFLAGS += $$system(pkg-config --cflags glib-2.0 libusb-1.0 python3-embed)
+
+    QMAKE_RPATHDIR += $$ATK_SRD_DIR/_build/.libs
+
+    QT += x11extras
+
+}
 
 RESOURCES += qml.qrc \
     resource.qrc
